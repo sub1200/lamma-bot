@@ -1,5 +1,4 @@
 import base64
-import io
 import logging
 import os
 import subprocess
@@ -13,53 +12,68 @@ from config import config
 logger = logging.getLogger(__name__)
 
 
-def _client() -> Optional[OpenAI]:
-    if not config.DEEPSEEK_API_KEY:
-        logger.error("DEEPSEEK_API_KEY not set")
-        return None
-    return OpenAI(
-        api_key=config.DEEPSEEK_API_KEY,
-        base_url=config.DEEPSEEK_API_URL,
-    )
-
-
 def _img_to_base64(image_bytes: bytes) -> str:
     return base64.b64encode(image_bytes).decode("utf-8")
 
 
-async def analyze_image(image_bytes: bytes, prompt: str = "Describe this image in detail in Arabic") -> str:
-    client = _client()
-    if not client:
-        return "❌ DEEPSEEK_API_KEY غير مضبوط."
-
+def _vision_call(image_bytes: bytes, prompt: str) -> str:
     b64 = _img_to_base64(image_bytes)
     data_url = f"data:image/jpeg;base64,{b64}"
 
-    try:
-        resp = client.chat.completions.create(
-            model=config.DEEPSEEK_MODEL,
-            messages=[
-                {
+    providers = []
+
+    if config.GROQ_API_KEY:
+        providers.append({
+            "name": "Groq",
+            "client": OpenAI(api_key=config.GROQ_API_KEY, base_url=config.GROQ_API_URL),
+            "model": "llama-3.2-90b-vision-preview",
+        })
+    if config.GEMINI_API_KEY:
+        providers.append({
+            "name": "Gemini",
+            "client": OpenAI(api_key=config.GEMINI_API_KEY, base_url=config.GEMINI_API_URL),
+            "model": "gemini-2.0-flash",
+        })
+    if config.GITHUB_API_KEY:
+        providers.append({
+            "name": "GitHub",
+            "client": OpenAI(api_key=config.GITHUB_API_KEY, base_url=config.GITHUB_API_URL),
+            "model": "gpt-4o-mini",
+        })
+
+    if not providers:
+        return "❌ No AI provider configured. Set GROQ_API_KEY, GEMINI_API_KEY, or GITHUB_API_KEY."
+
+    last_error = None
+    for p in providers:
+        try:
+            resp = p["client"].chat.completions.create(
+                model=p["model"],
+                messages=[{
                     "role": "user",
                     "content": [
                         {"type": "text", "text": prompt},
                         {"type": "image_url", "image_url": {"url": data_url}},
                     ],
-                }
-            ],
-            max_tokens=500,
-        )
-        return resp.choices[0].message.content.strip()
-    except Exception as e:
-        logger.error(f"Vision analysis error: {e}")
-        return f"❌ فشل التحليل: {e}"
+                }],
+                max_tokens=500,
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            last_error = e
+            continue
+
+    return f"❌ All vision providers failed: {last_error}"
+
+
+async def analyze_image(image_bytes: bytes, prompt: str = "Describe this image in detail in Arabic") -> str:
+    return _vision_call(image_bytes, prompt)
 
 
 async def suggest_product_style(image_bytes: bytes) -> str:
     prompt = (
         "You are a product photography expert. "
-        "Look at this product image and suggest the best presentation style for it. "
-        "The product is: (analyze what product this is)\n\n"
+        "Look at this product image and suggest the best presentation style for it.\n\n"
         "Available styles:\n"
         "- professional: white background, studio lighting\n"
         "- lifestyle: natural setting, realistic use\n"
@@ -70,7 +84,7 @@ async def suggest_product_style(image_bytes: bytes) -> str:
         "Reply with ONLY the style name (one word) that best fits this product, "
         "and a short explanation why."
     )
-    return await analyze_image(image_bytes, prompt)
+    return _vision_call(image_bytes, prompt)
 
 
 def extract_frames_from_video(video_bytes: bytes, num_frames: int = 3) -> list[bytes]:
@@ -109,25 +123,44 @@ def extract_frames_from_video(video_bytes: bytes, num_frames: int = 3) -> list[b
 async def analyze_video(video_bytes: bytes) -> str:
     frames = extract_frames_from_video(video_bytes)
     if not frames:
-        return "❌ لا يمكن تحليل الفيديو. تأكد من تثبيت FFmpeg."
+        return "❌ Cannot analyze video. Make sure FFmpeg is installed."
 
-    client = _client()
-    if not client:
-        return "❌ DEEPSEEK_API_KEY غير مضبوط."
+    b64_frames = [_img_to_base64(f) for f in frames[:3]]
+    content = [{"type": "text", "text": "Analyze these frames from a video in Arabic. Describe what's happening and the main subject."}]
+    for b64 in b64_frames:
+        content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
 
-    contents = [{"type": "text", "text": "Analyze these frames from a video in Arabic. Describe what's happening and the main subject."}]
+    providers = []
+    if config.GROQ_API_KEY:
+        providers.append({
+            "name": "Groq",
+            "client": OpenAI(api_key=config.GROQ_API_KEY, base_url=config.GROQ_API_URL),
+            "model": "llama-3.2-90b-vision-preview",
+        })
+    if config.GEMINI_API_KEY:
+        providers.append({
+            "name": "Gemini",
+            "client": OpenAI(api_key=config.GEMINI_API_KEY, base_url=config.GEMINI_API_URL),
+            "model": "gemini-2.0-flash",
+        })
+    if config.GITHUB_API_KEY:
+        providers.append({
+            "name": "GitHub",
+            "client": OpenAI(api_key=config.GITHUB_API_KEY, base_url=config.GITHUB_API_URL),
+            "model": "gpt-4o-mini",
+        })
 
-    for frame in frames[:3]:
-        b64 = _img_to_base64(frame)
-        contents.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+    last_error = None
+    for p in providers:
+        try:
+            resp = p["client"].chat.completions.create(
+                model=p["model"],
+                messages=[{"role": "user", "content": content}],
+                max_tokens=500,
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            last_error = e
+            continue
 
-    try:
-        resp = client.chat.completions.create(
-            model=config.DEEPSEEK_MODEL,
-            messages=[{"role": "user", "content": contents}],
-            max_tokens=500,
-        )
-        return resp.choices[0].message.content.strip()
-    except Exception as e:
-        logger.error(f"Video analysis error: {e}")
-        return f"❌ فشل تحليل الفيديو: {e}"
+    return f"❌ All providers failed: {last_error}"
