@@ -1,14 +1,11 @@
 import asyncio
 import logging
 import os
-import subprocess
 import threading
-import time
 from dotenv import load_dotenv
 
 load_dotenv()
 
-import requests as http_requests
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application
@@ -31,31 +28,6 @@ bot_app: Application = None
 bot_loop: asyncio.AbstractEventLoop = None
 
 
-def start_tor():
-    try:
-        proc = subprocess.Popen(
-            ["tor", "--SocksPort", "9050", "--Log", "notice", "--DataDirectory", "/tmp/tor-data"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        for i in range(30):
-            try:
-                r = http_requests.get(
-                    "https://check.torproject.org/",
-                    proxies={"https": "socks5://127.0.0.1:9050"},
-                    timeout=5,
-                )
-                logger.info(f"Tor ready (attempt {i+1})")
-                return proc
-            except Exception:
-                time.sleep(1)
-        logger.warning("Tor did not become ready in 30s")
-        return proc
-    except Exception as e:
-        logger.warning(f"Failed to start Tor: {e}")
-        return None
-
-
 @flask_app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook_handler():
     if bot_app is None or bot_loop is None:
@@ -74,32 +46,6 @@ def health():
     return "Starting...", 503
 
 
-@flask_app.route("/diag")
-def diag():
-    import socket
-    results = {}
-    for host in ["api.telegram.org", "149.154.166.110", "149.154.167.220"]:
-        try:
-            r = http_requests.get(
-                f"https://{host}/bot{config.TELEGRAM_BOT_TOKEN[:10]}/getMe",
-                timeout=10,
-                headers={"Host": "api.telegram.org"},
-            )
-            results[host] = r.status_code
-        except Exception as e:
-            results[host] = str(e)[:60]
-    try:
-        r = http_requests.get(
-            "https://api.telegram.org/bot" + config.TELEGRAM_BOT_TOKEN[:10] + "/getMe",
-            proxies={"https": "socks5://127.0.0.1:9050"},
-            timeout=10,
-        )
-        results["via_tor"] = r.status_code
-    except Exception as e:
-        results["via_tor"] = str(e)[:60]
-    return results, 200
-
-
 def run_flask():
     port = int(os.getenv("PORT", "7860"))
     flask_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
@@ -109,18 +55,12 @@ async def try_init_bot():
     global bot_app, bot_loop
     bot_loop = asyncio.get_running_loop()
 
-    tor_proc = start_tor()
-    proxy_url = "socks5://127.0.0.1:9050" if tor_proc else None
-
-    req_kwargs = {
-        "connect_timeout": 30,
-        "read_timeout": 30,
-        "write_timeout": 30,
-        "pool_timeout": 30,
-    }
-    if proxy_url:
-        req_kwargs["proxy"] = proxy_url
-    req = HTTPXRequest(**req_kwargs)
+    req = HTTPXRequest(
+        connect_timeout=30,
+        read_timeout=30,
+        write_timeout=30,
+        pool_timeout=30,
+    )
 
     for i in range(30):
         try:
