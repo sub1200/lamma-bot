@@ -52,22 +52,21 @@ def health():
 def diag():
     import socket
     results = {}
-    try:
-        ip = socket.getaddrinfo("api.telegram.org", 443)[0][4][0]
-        results["dns"] = ip
-    except Exception as e:
-        results["dns"] = str(e)
-    try:
-        r = http_requests.get("https://api.telegram.org/bot" + config.TELEGRAM_BOT_TOKEN[:20] + "/getMe", timeout=15)
-        results["api"] = r.status_code
-        results["api_body"] = r.text[:200]
-    except Exception as e:
-        results["api"] = str(e)
+    for host in ["api.telegram.org", "149.154.166.110", "149.154.167.220", "149.154.175.50"]:
+        try:
+            r = http_requests.get(
+                f"https://{host}/bot{config.TELEGRAM_BOT_TOKEN[:10]}/getMe",
+                timeout=10,
+                headers={"Host": "api.telegram.org"},
+            )
+            results[host] = r.status_code
+        except Exception as e:
+            results[host] = str(e)[:60]
     try:
         r = http_requests.get("https://google.com", timeout=10)
         results["internet"] = r.status_code
     except Exception as e:
-        results["internet"] = str(e)
+        results["internet"] = str(e)[:60]
     return results, 200
 
 
