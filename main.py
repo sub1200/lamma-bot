@@ -112,13 +112,15 @@ async def try_init_bot():
     tor_proc = start_tor()
     proxy_url = "socks5://127.0.0.1:9050" if tor_proc else None
 
-    req = HTTPXRequest(
-        connect_timeout=30,
-        read_timeout=30,
-        write_timeout=30,
-        pool_timeout=30,
-        proxy_url=proxy_url,
-    )
+    req_kwargs = {
+        "connect_timeout": 30,
+        "read_timeout": 30,
+        "write_timeout": 30,
+        "pool_timeout": 30,
+    }
+    if proxy_url:
+        req_kwargs["proxy"] = proxy_url
+    req = HTTPXRequest(**req_kwargs)
 
     for i in range(30):
         try:
