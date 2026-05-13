@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import os
+import subprocess
 import threading
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -27,7 +29,31 @@ logger = logging.getLogger(__name__)
 WEBHOOK_PATH = "/webhook"
 bot_app: Application = None
 bot_loop: asyncio.AbstractEventLoop = None
-_bot_ready = threading.Event()
+
+
+def start_tor():
+    try:
+        proc = subprocess.Popen(
+            ["tor", "--SocksPort", "9050", "--Log", "notice", "--DataDirectory", "/tmp/tor-data"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        for i in range(30):
+            try:
+                r = http_requests.get(
+                    "https://check.torproject.org/",
+                    proxies={"https": "socks5://127.0.0.1:9050"},
+                    timeout=5,
+                )
+                logger.info(f"Tor ready (attempt {i+1})")
+                return proc
+            except Exception:
+                time.sleep(1)
+        logger.warning("Tor did not become ready in 30s")
+        return proc
+    except Exception as e:
+        logger.warning(f"Failed to start Tor: {e}")
+        return None
 
 
 @flask_app.route(WEBHOOK_PATH, methods=["POST"])
@@ -52,7 +78,7 @@ def health():
 def diag():
     import socket
     results = {}
-    for host in ["api.telegram.org", "149.154.166.110", "149.154.167.220", "149.154.175.50"]:
+    for host in ["api.telegram.org", "149.154.166.110", "149.154.167.220"]:
         try:
             r = http_requests.get(
                 f"https://{host}/bot{config.TELEGRAM_BOT_TOKEN[:10]}/getMe",
@@ -63,10 +89,14 @@ def diag():
         except Exception as e:
             results[host] = str(e)[:60]
     try:
-        r = http_requests.get("https://google.com", timeout=10)
-        results["internet"] = r.status_code
+        r = http_requests.get(
+            "https://api.telegram.org/bot" + config.TELEGRAM_BOT_TOKEN[:10] + "/getMe",
+            proxies={"https": "socks5://127.0.0.1:9050"},
+            timeout=10,
+        )
+        results["via_tor"] = r.status_code
     except Exception as e:
-        results["internet"] = str(e)[:60]
+        results["via_tor"] = str(e)[:60]
     return results, 200
 
 
@@ -79,11 +109,15 @@ async def try_init_bot():
     global bot_app, bot_loop
     bot_loop = asyncio.get_running_loop()
 
+    tor_proc = start_tor()
+    proxy_url = "socks5://127.0.0.1:9050" if tor_proc else None
+
     req = HTTPXRequest(
         connect_timeout=30,
         read_timeout=30,
         write_timeout=30,
         pool_timeout=30,
+        proxy_url=proxy_url,
     )
 
     for i in range(30):
@@ -106,7 +140,6 @@ async def try_init_bot():
             webhook_url = f"{base_url}{WEBHOOK_PATH}"
             await bot_app.bot.set_webhook(url=webhook_url)
             logger.info(f"Bot ready! Webhook: {webhook_url}")
-            _bot_ready.set()
             return
         except Exception as e:
             logger.warning(f"Bot init attempt {i+1}/30 failed: {e}")
