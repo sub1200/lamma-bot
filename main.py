@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import requests as http_requests
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application
@@ -45,6 +46,29 @@ def health():
     if bot_app is not None and bot_app.running:
         return "Bot OK", 200
     return "Starting...", 503
+
+
+@flask_app.route("/diag")
+def diag():
+    import socket
+    results = {}
+    try:
+        ip = socket.getaddrinfo("api.telegram.org", 443)[0][4][0]
+        results["dns"] = ip
+    except Exception as e:
+        results["dns"] = str(e)
+    try:
+        r = http_requests.get("https://api.telegram.org/bot" + config.TELEGRAM_BOT_TOKEN[:20] + "/getMe", timeout=15)
+        results["api"] = r.status_code
+        results["api_body"] = r.text[:200]
+    except Exception as e:
+        results["api"] = str(e)
+    try:
+        r = http_requests.get("https://google.com", timeout=10)
+        results["internet"] = r.status_code
+    except Exception as e:
+        results["internet"] = str(e)
+    return results, 200
 
 
 def run_flask():
