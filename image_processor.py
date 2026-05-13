@@ -37,7 +37,10 @@ STYLES = {
 
 
 def get_hf_token() -> Optional[str]:
-    key = get_setting("hf_api_token", "")
+    import os
+    key = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN") or ""
+    if not key:
+        key = get_setting("hf_api_token", "")
     return key if key else None
 
 
