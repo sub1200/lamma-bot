@@ -1,0 +1,15 @@
+# Render Blueprint for Lamma Bot
+# This file describes how Render should deploy the app.
+services:
+  - type: web
+    name: lamma-bot
+    env: docker
+    plan: free
+    region: oregon
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_URL
+ la la la la la l l la la la la la l l l la l l l l l la la la l la la la la la l la l la la la la la l l l la l l la la la la la l l l la l la la la la l la la l la la l la l l l la la l la l la l la la la la la la la l la l la l l l la la l la la la la la la l l l l l la la la la l la la la la la la la la l la la l l la l la la l la la la la la la l l la l l la la la la la la la la la la la la l l la la la l la la l la l l l la la la l l la la la la la la l l l la la la l la l la la la l la la l la la l la la la la l la la la l la l l la l la la la la l la la la la la l l la la la l la l la l la la la l la l la la la la l l la la la l la la la la la la l la la l la la la la l la la l la la l la la l la l la la la la la l l la la la l la la la la la l la l la l la la la la la la l l la la la l la la la la la la l l la la la la la l l la la la la l la la la l la l la l la la l l la la la l la la la la la la l l la la la la l la la l la la la la la l la l la la la l l l la la la l la la la la la l la la l la la l la l l la la la la l la la la l la la l la la l la la l la l la la l l la l la la la la la la la la l la la la la l l la la la la la la l la la la la l la la la la l l la la la la la l la la la l la la la la la l l la la la la la la la la la la l l la l la la l la la l l la la la la la l la l la la l la la la l l la la la l la l la la l l la la la la la la la la la la la la l la la l l l la la la la la la l la la l la la la la la la la l la l l la l la la la la la la l la la la la l l la la la la la l l la la la la l l la la la la la la la l l la l la la la l la la l l l la la la la la l l la l la l la la la la l l la l la la la l la la la l la l la la l la la la l l la la l la la la l la la la l la l l la la l la l la la l la la la la l de

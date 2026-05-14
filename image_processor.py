@@ -1,97 +1,117 @@
 import logging
-import requests
+import io
 from typing import Optional
-
-from database import get_setting
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 logger = logging.getLogger(__name__)
-
-HF_API = "https://api-inference.huggingface.co/models"
 
 STYLES = {
     "professional": {
         "label": "احترافي - خلفية بيضاء",
-        "prompt": "Transform this product into a professional product photo, white background, studio lighting",
+        "action": "professional",
     },
     "lifestyle": {
         "label": "لايف ستايل - استخدام واقعي",
-        "prompt": "Transform this product into a lifestyle photo, natural setting, realistic use, warm lighting",
+        "action": "lifestyle",
     },
     "3d_mockup": {
         "label": "موديل ثلاثي الأبعاد",
-        "prompt": "Transform this product into a 3D render mockup, isometric view, modern design",
+        "action": "3d_mockup",
     },
     "minimalist": {
         "label": "بساطة - تصميم أنيق",
-        "prompt": "Transform this product into a minimalist style, clean background, elegant, soft lighting",
+        "action": "minimalist",
     },
     "social_media": {
         "label": "سوشيال ميديا - جذاب",
-        "prompt": "Transform this product for social media, eye-catching, vibrant colors, instagram style",
+        "action": "social_media",
     },
     "luxury": {
         "label": "فاخر - راقي",
-        "prompt": "Transform this product into luxury style, gold accents, dramatic lighting, premium feel",
+        "action": "luxury",
     },
 }
 
 
-def get_hf_token() -> Optional[str]:
-    import os
-    key = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN") or ""
-    if not key:
-        key = get_setting("hf_api_token", "")
-    return key if key else None
+def apply_style(img: Image.Image, action: str) -> Image.Image:
+    if action == "professional":
+        bg = Image.new("RGB", (int(img.width * 1.2), int(img.height * 1.2)), (255, 255, 255))
+        offset = ((bg.width - img.width) // 2, (bg.height - img.height) // 2)
+        bg.paste(img, offset)
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(1.15)
+        return bg
+
+    elif action == "lifestyle":
+        enhancer = ImageEnhance.Color(img)
+        img = enhancer.enhance(1.3)
+        enhancer = ImageEnhance.Brightness(img)
+        img = enhancer.enhance(1.1)
+        img = img.filter(ImageFilter.SMOOTH_MORE)
+        return img
+
+    elif action == "3d_mockup":
+        img = img.filter(ImageFilter.SHARPEN)
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(1.25)
+        enhancer = ImageEnhance.Color(img)
+        img = enhancer.enhance(1.2)
+        img = img.filter(ImageFilter.EDGE_ENHANCE_MORE)
+        return img
+
+    elif action == "minimalist":
+        enhancer = ImageEnhance.Color(img)
+        img = enhancer.enhance(0.7)
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(1.05)
+        bg = Image.new("RGB", (int(img.width * 1.4), int(img.height * 1.4)), (245, 245, 240))
+        offset = ((bg.width - img.width) // 2, (bg.height - img.height) // 2)
+        bg.paste(img, offset)
+        return bg
+
+    elif action == "social_media":
+        enhancer = ImageEnhance.Color(img)
+        img = enhancer.enhance(1.5)
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(1.2)
+        enhancer = ImageEnhance.Brightness(img)
+        img = enhancer.enhance(1.15)
+        return img
+
+    elif action == "luxury":
+        img = img.filter(ImageFilter.SHARPEN)
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(1.3)
+        enhancer = ImageEnhance.Color(img)
+        img = enhancer.enhance(1.1)
+        img = ImageOps.expand(img, border=8, fill=(192, 168, 128))
+        img = ImageOps.expand(img, border=2, fill=(128, 100, 64))
+        return img
+
+    return img
 
 
 def transform_product_image(
     image_bytes: bytes,
     style: str,
 ) -> Optional[bytes]:
-    token = get_hf_token()
-    if not token:
-        logger.error("Hugging Face token not set")
-        return None
-
     style_config = STYLES.get(style)
     if not style_config:
         logger.error(f"Unknown style: {style}")
         return None
 
-    prompt = style_config["prompt"]
-
-    headers = {"Authorization": f"Bearer {token}"}
-    model = "stabilityai/stable-diffusion-2-1"
-
     try:
-        resp = requests.post(
-            f"{HF_API}/{model}",
-            headers=headers,
-            files={"image": ("image.png", image_bytes, "image/png")},
-            data={"inputs": prompt},
-            timeout=120,
-        )
+        img = Image.open(io.BytesIO(image_bytes))
+        if img.mode != "RGB":
+            img = img.convert("RGB")
 
-        if resp.status_code == 200:
-            return resp.content
+        img.thumbnail((1024, 1024), Image.LANCZOS)
+        img = apply_style(img, style_config["action"])
 
-        if resp.status_code == 503:
-            logger.info("Model is loading on HF, retrying...")
-            import time
-            time.sleep(20)
-            resp = requests.post(
-                f"{HF_API}/{model}",
-                headers=headers,
-                files={"image": ("image.png", image_bytes, "image/png")},
-                data={"inputs": prompt},
-                timeout=120,
-            )
-            if resp.status_code == 200:
-                return resp.content
+        buf = io.BytesIO()
+        img.save(buf, format="PNG", optimize=True)
+        return buf.getvalue()
 
-        logger.error(f"HF API error ({resp.status_code}): {resp.text[:200]}")
-        return None
-
-    except requests.RequestException as e:
-        logger.error(f"HF request failed: {e}")
+    except Exception as e:
+        logger.error(f"Image transform error: {e}")
         return None
