@@ -1,6 +1,7 @@
 import io
 import logging
 from typing import Optional
+from urllib.parse import quote
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 import requests
 
@@ -45,7 +46,7 @@ STYLES = {
 def generate_ai_image(prompt: str) -> Optional[bytes]:
     try:
         resp = requests.get(
-            f"{POLLINATIONS_URL}/{requests.utils.quote(prompt)}",
+            f"{POLLINATIONS_URL}/{quote(prompt)}",
             params={"nofeed": "true", "width": 1024, "height": 1024},
             timeout=60,
         )
