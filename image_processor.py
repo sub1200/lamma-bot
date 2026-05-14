@@ -13,32 +13,26 @@ STYLES = {
     "professional": {
         "label": "احترافي - خلفية بيضاء",
         "action": "professional",
-        "prompt": "professional product photo, white background, studio lighting, high quality",
     },
     "lifestyle": {
         "label": "لايف ستايل - استخدام واقعي",
         "action": "lifestyle",
-        "prompt": "lifestyle product photo, natural setting, realistic use, warm lighting",
     },
     "3d_mockup": {
         "label": "موديل ثلاثي الأبعاد",
         "action": "3d_mockup",
-        "prompt": "3D render mockup of product, isometric view, modern design, high detail",
     },
     "minimalist": {
         "label": "بساطة - تصميم أنيق",
         "action": "minimalist",
-        "prompt": "minimalist product photo, clean background, elegant, soft lighting",
     },
     "social_media": {
         "label": "سوشيال ميديا - جذاب",
         "action": "social_media",
-        "prompt": "social media product photo, eye-catching, vibrant colors, instagram style",
     },
     "luxury": {
         "label": "فاخر - راقي",
         "action": "luxury",
-        "prompt": "luxury product photo, gold accents, dramatic lighting, premium feel",
     },
 }
 
@@ -98,18 +92,11 @@ def apply_pillow_style(img: Image.Image, action: str) -> Image.Image:
 def transform_product_image(
     image_bytes: bytes,
     style: str,
-    description: str = "",
 ) -> Optional[bytes]:
     style_config = STYLES.get(style)
     if not style_config:
         logger.error(f"Unknown style: {style}")
         return None
-
-    if description:
-        prompt = f"{description}, {style_config['prompt']}"
-        result = generate_ai_image(prompt)
-        if result:
-            return result
 
     try:
         img = Image.open(io.BytesIO(image_bytes))
@@ -119,7 +106,6 @@ def transform_product_image(
         img = apply_pillow_style(img, style_config["action"])
         buf = io.BytesIO()
         img.save(buf, format="PNG", optimize=True)
-        logger.info(f"Pillow fallback used for style: {style}")
         return buf.getvalue()
     except Exception as e:
         logger.error(f"Image transform error: {e}")

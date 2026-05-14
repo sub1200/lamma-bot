@@ -9,7 +9,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from image_processor import STYLES, transform_product_image
+from image_processor import STYLES, transform_product_image, text_to_image
 from video_generator import image_to_video
 from vision_analyzer import analyze_image, suggest_product_style
 from database import save_post
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 AWAITING_PHOTO = {}
 AWAITING_ACTION = {}
+AWAITING_IMAGINE = {}
 
 
 async def product_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -86,11 +87,10 @@ async def handle_style_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
         AWAITING_ACTION.pop(user_id, None)
         return
 
-    await query.edit_message_text(f"⏳ جاري إنشاء الصورة بـ AI... ({STYLES[style_key]['label']})")
+    await query.edit_message_text(f"⏳ جاري تحويل الصورة... ({STYLES[style_key]['label']})")
 
     try:
-        description = context.user_data.get("product_description", "")
-        result = transform_product_image(original, style_key, description)
+        result = transform_product_image(original, style_key)
         if result is None:
             await query.edit_message_text(
                 "❌ فشل التحويل.\n"
@@ -220,8 +220,50 @@ async def handle_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+async def imagine_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if context.args:
+        prompt = " ".join(context.args)
+        await update.message.reply_text("⏳ جاري إنشاء الصورة...")
+        result = text_to_image(prompt)
+        if result:
+            await update.message.reply_photo(photo=result, caption=f"🎨 {prompt}")
+        else:
+            await update.message.reply_text("❌ فشل إنشاء الصورة. حاول مرة أخرى.")
+        return
+    AWAITING_IMAGINE[user_id] = True
+    await update.message.reply_text(
+        "🎨 **إنشاء صورة بالذكاء الاصطناعي**\n\n"
+        "أرسل لي وصفاً للصورة التي تريدها:\n"
+        "مثال: 'قطة تجلس على أريكة في غرفة معيشة'\n\n"
+        "أو استخدم: /imagine <الوصف>",
+        parse_mode="Markdown",
+    )
+
+
+async def handle_imagine_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in AWAITING_IMAGINE:
+        return
+    AWAITING_IMAGINE.pop(user_id, None)
+
+    prompt = update.message.text
+    await update.message.reply_text("⏳ جاري إنشاء الصورة... قد يستغرق دقيقة")
+
+    result = text_to_image(prompt)
+    if result:
+        await update.message.reply_photo(
+            photo=result,
+            caption=f"🎨 تم إنشاء الصورة\nالوصف: {prompt}",
+        )
+    else:
+        await update.message.reply_text("❌ فشل إنشاء الصورة. حاول مرة أخرى.")
+
+
 def product_handlers(app):
     app.add_handler(CommandHandler("product", product_start))
+    app.add_handler(CommandHandler("imagine", imagine_start))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_imagine_text))
     app.add_handler(CallbackQueryHandler(handle_style_choice, pattern="^style_"))
     app.add_handler(CallbackQueryHandler(handle_action, pattern="^act_"))
