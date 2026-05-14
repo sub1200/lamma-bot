@@ -45,20 +45,42 @@ STYLES = {
 
 def remove_background(image: Image.Image) -> Image.Image:
     img = image.convert("RGBA")
-    try:
-        bg_color = img.getpixel((0, 0))[:3]
-        datas = img.getdata()
-        new_data = []
-        threshold = 60
-        for item in datas:
-            if all(abs(item[c] - bg_color[c]) < threshold for c in range(3)):
-                new_data.append((255, 255, 255, 0))
-            else:
-                new_data.append(item)
-        img.putdata(new_data)
-    except Exception as e:
-        logger.warning(f"Simple background removal failed: {e}")
-    return img
+    datas = img.getdata()
+    w, h = img.size
+
+    edge_colors = []
+    for x in range(w):
+        edge_colors.append(img.getpixel((x, 0))[:3])
+        edge_colors.append(img.getpixel((x, h - 1))[:3])
+    for y in range(h):
+        edge_colors.append(img.getpixel((0, y))[:3])
+        edge_colors.append(img.getpixel((w - 1, y))[:3])
+
+    bg_r = sum(c[0] for c in edge_colors) // len(edge_colors)
+    bg_g = sum(c[1] for c in edge_colors) // len(edge_colors)
+    bg_b = sum(c[2] for c in edge_colors) // len(edge_colors)
+    bg_color = (bg_r, bg_g, bg_b)
+    bg_brightness = (bg_r + bg_g + bg_b) / 3
+
+    threshold = 80 if bg_brightness > 128 else 60
+
+    new_data = []
+    for item in datas:
+        if all(abs(item[c] - bg_color[c]) < threshold for c in range(3)):
+            new_data.append((255, 255, 255, 0))
+        else:
+            new_data.append(item)
+    img.putdata(new_data)
+
+    mask = Image.new("L", (w, h), 0)
+    mask_data = [255 if a > 0 else 0 for _, _, _, a in img.getdata()]
+    mask.putdata(mask_data)
+    mask = mask.filter(ImageFilter.MedianFilter(size=5))
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=1))
+
+    result = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    result.paste(img, mask=mask)
+    return result
 
 
 def composite_on_background(product: Image.Image, bg: Image.Image) -> Image.Image:
