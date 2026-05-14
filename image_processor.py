@@ -2,7 +2,7 @@ import io
 import logging
 from typing import Optional
 from urllib.parse import quote
-from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps, ImageDraw
 import requests
 
 logger = logging.getLogger(__name__)
@@ -13,28 +13,165 @@ STYLES = {
     "professional": {
         "label": "احترافي - خلفية بيضاء",
         "action": "professional",
+        "prompt": "clean studio background, soft gradient, elegant",
     },
     "lifestyle": {
         "label": "لايف ستايل - استخدام واقعي",
         "action": "lifestyle",
+        "prompt": "natural lifestyle setting, warm cozy room with sunlight, modern interior",
     },
     "3d_mockup": {
         "label": "موديل ثلاثي الأبعاد",
         "action": "3d_mockup",
+        "prompt": "3D render studio background, isometric platform, modern, clean",
     },
     "minimalist": {
         "label": "بساطة - تصميم أنيق",
         "action": "minimalist",
+        "prompt": "minimalist studio, beige background, soft natural light",
     },
     "social_media": {
         "label": "سوشيال ميديا - جذاب",
         "action": "social_media",
+        "prompt": "vibrant social media background, colorful gradient, trendy",
     },
     "luxury": {
         "label": "فاخر - راقي",
         "action": "luxury",
+        "prompt": "luxury showroom, dark elegant background, gold accents, dramatic lighting",
     },
 }
+
+
+_session = None
+
+
+def get_rembg_session():
+    global _session
+    if _session is None:
+        try:
+            from rembg import new_session
+            _session = new_session("u2netp")
+        except Exception as e:
+            logger.warning(f"rembg init failed: {e}")
+    return _session
+
+
+def remove_background(image: Image.Image) -> Image.Image:
+    session = get_rembg_session()
+    if session:
+        try:
+            from rembg import remove as rembg_remove
+            buf = io.BytesIO()
+            image.save(buf, format="PNG")
+            buf.seek(0)
+            result = rembg_remove(buf.read(), session=session)
+            return Image.open(io.BytesIO(result)).convert("RGBA")
+        except Exception as e:
+            logger.warning(f"rembg remove failed: {e}")
+
+    img = image.convert("RGBA")
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+    try:
+        bg_color = img.getpixel((0, 0))[:3]
+        datas = img.getdata()
+        new_data = []
+        threshold = 60
+        for item in datas:
+            if all(abs(item[c] - bg_color[c]) < threshold for c in range(3)):
+                new_data.append((255, 255, 255, 0))
+            else:
+                new_data.append(item)
+        img.putdata(new_data)
+    except Exception as e:
+        logger.warning(f"Simple background removal failed: {e}")
+    return img
+
+
+def composite_on_background(product: Image.Image, bg: Image.Image) -> Image.Image:
+    product_rgba = product.convert("RGBA")
+    bg_rgb = bg.convert("RGBA")
+
+    max_w = int(bg_rgb.width * 0.7)
+    max_h = int(bg_rgb.height * 0.6)
+    product_rgba.thumbnail((max_w, max_h), Image.LANCZOS)
+
+    x = (bg_rgb.width - product_rgba.width) // 2
+    y = int(bg_rgb.height * 0.35)
+
+    shadow = Image.new("RGBA", product_rgba.size, (0, 0, 0, 0))
+    shadow_draw = ImageDraw.Draw(shadow)
+    shadow_draw.ellipse(
+        [
+            int(product_rgba.width * 0.1),
+            product_rgba.height - int(product_rgba.height * 0.1),
+            int(product_rgba.width * 0.9),
+            product_rgba.height,
+        ],
+        fill=(0, 0, 0, 40),
+    )
+    shadow = shadow.filter(ImageFilter.GAUSSIAN_BLUR(radius=8))
+    bg_rgb.paste(shadow, (x, y), shadow)
+
+    bg_rgb.paste(product_rgba, (x, y), product_rgba)
+    return bg_rgb
+
+
+def generate_scene_background(description: str, style_prompt: str) -> Optional[Image.Image]:
+    full_prompt = f"product photography background: {description}, {style_prompt}, no products, just the background scene, empty space in center"
+    try:
+        resp = requests.get(
+            f"{POLLINATIONS_URL}/{quote(full_prompt)}",
+            params={"nofeed": "true", "width": 1024, "height": 1024},
+            timeout=60,
+        )
+        if resp.status_code == 200:
+            return Image.open(io.BytesIO(resp.content)).convert("RGB")
+    except Exception as e:
+        logger.warning(f"Scene generation failed: {e}")
+    return None
+
+
+def create_professional_background(width: int, height: int) -> Image.Image:
+    bg = Image.new("RGB", (width, height), (255, 255, 255))
+    draw = ImageDraw.Draw(bg)
+    for i in range(height):
+        color = int(255 - (i / height) * 30)
+        draw.line([(0, i), (width, i)], fill=(color, color, color))
+    return bg
+
+
+def create_gradient_background(width: int, height: int, top_color, bottom_color) -> Image.Image:
+    bg = Image.new("RGB", (width, height))
+    draw = ImageDraw.Draw(bg)
+    for i in range(height):
+        ratio = i / height
+        r = int(top_color[0] * (1 - ratio) + bottom_color[0] * ratio)
+        g = int(top_color[1] * (1 - ratio) + bottom_color[1] * ratio)
+        b = int(top_color[2] * (1 - ratio) + bottom_color[2] * ratio)
+        draw.line([(0, i), (width, i)], fill=(r, g, b))
+    return bg
+
+
+def create_pedestal_background(width: int, height: int, dark: bool = False) -> Image.Image:
+    if dark:
+        bg = Image.new("RGB", (width, height), (30, 30, 40))
+    else:
+        bg = Image.new("RGB", (width, height), (240, 240, 245))
+    draw = ImageDraw.Draw(bg)
+    pw, ph = width // 3, height // 6
+    px = (width - pw) // 2
+    py = height - ph - height // 6
+    if dark:
+        pedestal_color = (50, 50, 65)
+        top_color = (70, 70, 90)
+    else:
+        pedestal_color = (220, 220, 225)
+        top_color = (245, 245, 250)
+    draw.rounded_rectangle([px, py, px + pw, py + ph], radius=10, fill=pedestal_color)
+    draw.rounded_rectangle([px + 5, py - 5, px + pw - 5, py + 5], radius=5, fill=top_color)
+    return bg
 
 
 def generate_ai_image(prompt: str) -> Optional[bytes]:
@@ -53,45 +190,14 @@ def generate_ai_image(prompt: str) -> Optional[bytes]:
     return None
 
 
-def apply_pillow_style(img: Image.Image, action: str) -> Image.Image:
-    if action == "professional":
-        bg = Image.new("RGB", (int(img.width * 1.2), int(img.height * 1.2)), (255, 255, 255))
-        offset = ((bg.width - img.width) // 2, (bg.height - img.height) // 2)
-        bg.paste(img, offset)
-        return bg
-    elif action == "lifestyle":
-        img = ImageEnhance.Color(img).enhance(1.3)
-        img = ImageEnhance.Brightness(img).enhance(1.1)
-        return img.filter(ImageFilter.SMOOTH_MORE)
-    elif action == "3d_mockup":
-        img = img.filter(ImageFilter.SHARPEN)
-        img = ImageEnhance.Contrast(img).enhance(1.25)
-        img = ImageEnhance.Color(img).enhance(1.2)
-        return img.filter(ImageFilter.EDGE_ENHANCE_MORE)
-    elif action == "minimalist":
-        img = ImageEnhance.Color(img).enhance(0.7)
-        img = ImageEnhance.Contrast(img).enhance(1.05)
-        bg = Image.new("RGB", (int(img.width * 1.4), int(img.height * 1.4)), (245, 245, 240))
-        offset = ((bg.width - img.width) // 2, (bg.height - img.height) // 2)
-        bg.paste(img, offset)
-        return bg
-    elif action == "social_media":
-        img = ImageEnhance.Color(img).enhance(1.5)
-        img = ImageEnhance.Contrast(img).enhance(1.2)
-        return ImageEnhance.Brightness(img).enhance(1.15)
-    elif action == "luxury":
-        img = img.filter(ImageFilter.SHARPEN)
-        img = ImageEnhance.Contrast(img).enhance(1.3)
-        img = ImageEnhance.Color(img).enhance(1.1)
-        img = ImageOps.expand(img, border=8, fill=(192, 168, 128))
-        img = ImageOps.expand(img, border=2, fill=(128, 100, 64))
-        return img
-    return img
+def text_to_image(prompt: str) -> Optional[bytes]:
+    return generate_ai_image(prompt)
 
 
 def transform_product_image(
     image_bytes: bytes,
     style: str,
+    description: str = "",
 ) -> Optional[bytes]:
     style_config = STYLES.get(style)
     if not style_config:
@@ -99,18 +205,35 @@ def transform_product_image(
         return None
 
     try:
-        img = Image.open(io.BytesIO(image_bytes))
-        if img.mode != "RGB":
-            img = img.convert("RGB")
-        img.thumbnail((1024, 1024), Image.LANCZOS)
-        img = apply_pillow_style(img, style_config["action"])
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        img.thumbnail((800, 800), Image.LANCZOS)
+
+        product_rgba = remove_background(img)
+        W, H = 1024, 1024
+
+        bg = generate_scene_background(description, style_config["prompt"])
+        if bg is None:
+            if style_config["action"] == "professional":
+                bg = create_professional_background(W, H)
+            elif style_config["action"] == "lifestyle":
+                bg = create_gradient_background(W, H, (255, 248, 240), (230, 210, 190))
+            elif style_config["action"] == "3d_mockup":
+                bg = create_pedestal_background(W, H, dark=True)
+            elif style_config["action"] == "minimalist":
+                bg = create_gradient_background(W, H, (248, 245, 240), (235, 230, 220))
+            elif style_config["action"] == "social_media":
+                bg = create_gradient_background(W, H, (255, 100, 100), (100, 100, 255))
+            elif style_config["action"] == "luxury":
+                bg = create_pedestal_background(W, H, dark=True)
+            else:
+                bg = create_professional_background(W, H)
+
+        result = composite_on_background(product_rgba, bg)
+
         buf = io.BytesIO()
-        img.save(buf, format="PNG", optimize=True)
+        result.save(buf, format="PNG", optimize=True)
+        logger.info(f"Image transformed: {style}")
         return buf.getvalue()
     except Exception as e:
-        logger.error(f"Image transform error: {e}")
+        logger.error(f"Transform error: {e}")
         return None
-
-
-def text_to_image(prompt: str) -> Optional[bytes]:
-    return generate_ai_image(prompt)

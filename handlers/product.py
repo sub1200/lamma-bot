@@ -90,7 +90,8 @@ async def handle_style_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.edit_message_text(f"⏳ جاري تحويل الصورة... ({STYLES[style_key]['label']})")
 
     try:
-        result = transform_product_image(original, style_key)
+        description = context.user_data.get("product_description", "")
+        result = transform_product_image(original, style_key, description)
         if result is None:
             await query.edit_message_text(
                 "❌ فشل التحويل.\n"
