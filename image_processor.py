@@ -43,36 +43,8 @@ STYLES = {
 }
 
 
-_session = None
-
-
-def get_rembg_session():
-    global _session
-    if _session is None:
-        try:
-            from rembg import new_session
-            _session = new_session("u2netp")
-        except Exception as e:
-            logger.warning(f"rembg init failed: {e}")
-    return _session
-
-
 def remove_background(image: Image.Image) -> Image.Image:
-    session = get_rembg_session()
-    if session:
-        try:
-            from rembg import remove as rembg_remove
-            buf = io.BytesIO()
-            image.save(buf, format="PNG")
-            buf.seek(0)
-            result = rembg_remove(buf.read(), session=session)
-            return Image.open(io.BytesIO(result)).convert("RGBA")
-        except Exception as e:
-            logger.warning(f"rembg remove failed: {e}")
-
     img = image.convert("RGBA")
-    if img.mode != "RGBA":
-        img = img.convert("RGBA")
     try:
         bg_color = img.getpixel((0, 0))[:3]
         datas = img.getdata()
