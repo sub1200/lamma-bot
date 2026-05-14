@@ -53,6 +53,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Keep your response to 3 short sentences.",
     )
 
+    context.user_data["product_description"] = analysis
     AWAITING_ACTION[user_id] = True
 
     keyboard = []
@@ -85,15 +86,15 @@ async def handle_style_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
         AWAITING_ACTION.pop(user_id, None)
         return
 
-    await query.edit_message_text(f"⏳ جاري تحويل الصورة... ({STYLES[style_key]['label']})")
+    await query.edit_message_text(f"⏳ جاري إنشاء الصورة بـ AI... ({STYLES[style_key]['label']})")
 
     try:
-        result = transform_product_image(original, style_key)
+        description = context.user_data.get("product_description", "")
+        result = transform_product_image(original, style_key, description)
         if result is None:
             await query.edit_message_text(
-                "❌ فشل التحويل.\n\n"
-                "تأكد من ضبط Hugging Face Token في /settings\n"
-                "وتأكد من اتصال الإنترنت."
+                "❌ فشل التحويل.\n"
+                "تأكد من اتصال الإنترنت."
             )
             AWAITING_ACTION.pop(user_id, None)
             return
