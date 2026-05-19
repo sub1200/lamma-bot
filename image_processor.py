@@ -94,7 +94,7 @@ def composite_on_background(product: Image.Image, bg: Image.Image) -> Image.Imag
         ],
         fill=(0, 0, 0, 40),
     )
-    shadow = shadow.filter(ImageFilter.GAUSSIAN_BLUR(radius=8))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(radius=8))
     bg_rgb.paste(shadow, (x, y), shadow)
 
     bg_rgb.paste(product_rgba, (x, y), product_rgba)
