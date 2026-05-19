@@ -46,6 +46,21 @@ def health():
     return "Starting...", 503
 
 
+@flask_app.route("/test")
+def test():
+    from image_processor import transform_product_image
+    from PIL import Image
+    import io
+    img = Image.new("RGB", (200, 200), (255, 255, 255))
+    img.save(io.BytesIO(), format="PNG")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    result = transform_product_image(buf.getvalue(), "professional")
+    if result:
+        return f"OK - {len(result)} bytes"
+    return "FAILED - check logs"
+
+
 def run_flask():
     port = int(os.getenv("PORT", "7860"))
     flask_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
