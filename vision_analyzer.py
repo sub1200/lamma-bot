@@ -56,7 +56,7 @@ def _vision_call(image_bytes: bytes, prompt: str) -> str:
                         {"type": "image_url", "image_url": {"url": data_url}},
                     ],
                 }],
-                max_tokens=500,
+                max_tokens=1000,
             )
             return resp.choices[0].message.content.strip()
         except Exception as e:
@@ -66,7 +66,22 @@ def _vision_call(image_bytes: bytes, prompt: str) -> str:
     return f"❌ All vision providers failed: {last_error}"
 
 
-async def analyze_image(image_bytes: bytes, prompt: str = "Describe this image in detail in Arabic") -> str:
+async def analyze_image(image_bytes: bytes, prompt: str = None) -> str:
+    # If no prompt is provided, we use the "Ultra Luxury Sales Agent" prompt
+    if not prompt:
+        prompt = (
+            "You are a world-class Creative Director and Luxury Marketing Expert. "
+            "Analyze the product in this image and generate a high-end marketing package in Arabic.\n\n"
+            "Your response MUST follow this structure:\n\n"
+            "1. 💎 **التحليل النفسي للمنتج**: (Identify the core value and how it makes the customer feel special. Focus on prestige and elegance).\n"
+            "2. ✍️ **نماذج إعلانية فاخرة**:\n"
+            "   - **النمط الملكي (Royal):** High-class, authoritative, and exclusive language.\n"
+            "   - **النمط العصري (Modern Luxury):** Clean, minimal, and sophisticated.\n"
+            "   - **النمط الإقناعي (Persuasive):** Focus on the 'must-have' feeling and urgent desire.\n"
+            "3. 📸 **نصائح التصوير الاحترافي**: (Suggest the best background, lighting, and angle to make the product look like a million dollars).\n\n"
+            "Make the language extremely seductive and professional (Arabic). Use emojis sparingly but effectively."
+        )
+    
     return _vision_call(image_bytes, prompt)
 
 
@@ -123,7 +138,7 @@ def extract_frames_from_video(video_bytes: bytes, num_frames: int = 3) -> list[b
 async def analyze_video(video_bytes: bytes) -> str:
     frames = extract_frames_from_video(video_bytes)
     if not frames:
-        return "❌ Cannot analyze video. Make sure FFmpeg is installed."
+        return "❌ Cannot analyze video. Make make sure FFmpeg is installed."
 
     b64_frames = [_img_to_base64(f) for f in frames[:3]]
     content = [{"type": "text", "text": "Analyze these frames from a video in Arabic. Describe what's happening and the main subject."}]
