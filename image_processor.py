@@ -177,35 +177,42 @@ def transform_product_image(
         return None
 
     try:
+        logger.info(f"Opening image, size: {len(image_bytes)} bytes")
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        logger.info(f"Image size: {img.size}")
         img.thumbnail((800, 800), Image.LANCZOS)
 
+        logger.info("Removing background...")
         product_rgba = remove_background(img)
+        logger.info(f"Product RGBA mode: {product_rgba.mode}")
         W, H = 1024, 1024
 
-        bg = generate_scene_background(description, style_config["prompt"])
-        if bg is None:
-            if style_config["action"] == "professional":
-                bg = create_professional_background(W, H)
-            elif style_config["action"] == "lifestyle":
-                bg = create_gradient_background(W, H, (255, 248, 240), (230, 210, 190))
-            elif style_config["action"] == "3d_mockup":
-                bg = create_pedestal_background(W, H, dark=True)
-            elif style_config["action"] == "minimalist":
-                bg = create_gradient_background(W, H, (248, 245, 240), (235, 230, 220))
-            elif style_config["action"] == "social_media":
-                bg = create_gradient_background(W, H, (255, 100, 100), (100, 100, 255))
-            elif style_config["action"] == "luxury":
-                bg = create_pedestal_background(W, H, dark=True)
-            else:
-                bg = create_professional_background(W, H)
+        bg = None
+        logger.info(f"Creating background for style: {style_config['action']}")
+        if style_config["action"] == "professional":
+            bg = create_professional_background(W, H)
+        elif style_config["action"] == "lifestyle":
+            bg = create_gradient_background(W, H, (255, 248, 240), (230, 210, 190))
+        elif style_config["action"] == "3d_mockup":
+            bg = create_pedestal_background(W, H, dark=True)
+        elif style_config["action"] == "minimalist":
+            bg = create_gradient_background(W, H, (248, 245, 240), (235, 230, 220))
+        elif style_config["action"] == "social_media":
+            bg = create_gradient_background(W, H, (255, 100, 100), (100, 100, 255))
+        elif style_config["action"] == "luxury":
+            bg = create_pedestal_background(W, H, dark=True)
+        else:
+            bg = create_professional_background(W, H)
 
+        logger.info("Compositing...")
         result = composite_on_background(product_rgba, bg)
 
         buf = io.BytesIO()
         result.save(buf, format="PNG", optimize=True)
-        logger.info(f"Image transformed: {style}")
+        logger.info(f"Image transformed: {style}, output: {len(buf.getvalue())} bytes")
         return buf.getvalue()
     except Exception as e:
+        import traceback
         logger.error(f"Transform error: {e}")
+        logger.error(traceback.format_exc())
         return None
