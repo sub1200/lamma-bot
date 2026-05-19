@@ -226,7 +226,29 @@ def mark_schedule_done(schedule_id: int):
 
 def get_reply_rules(platform: str):
     cur = get_conn().execute(
-        "SELECT * FROM auto_reply_rules WHERE platform = ? AND enabled = 1",
+        "SELECT * FROM auto_reply_rules WHERE platform = ? ORDER BY id",
         (platform,),
     )
     return cur.fetchall()
+
+
+def add_reply_rule(platform: str, keywords: str, reply_template: str):
+    get_conn().execute(
+        "INSERT INTO auto_reply_rules (platform, keywords, reply_template) VALUES (?, ?, ?)",
+        (platform, keywords, reply_template),
+    )
+    get_conn().commit()
+
+
+def delete_reply_rule(rule_id: int):
+    get_conn().execute("DELETE FROM auto_reply_rules WHERE id = ?", (rule_id,))
+    get_conn().commit()
+
+
+def set_reply_rule_enabled(rule_id: int):
+    cur = get_conn().execute("SELECT enabled FROM auto_reply_rules WHERE id = ?", (rule_id,))
+    row = cur.fetchone()
+    if row:
+        new_val = 0 if row["enabled"] else 1
+        get_conn().execute("UPDATE auto_reply_rules SET enabled = ? WHERE id = ?", (new_val, rule_id))
+        get_conn().commit()

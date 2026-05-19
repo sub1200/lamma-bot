@@ -75,3 +75,10 @@ def generate_comment_reply(comment: str, language: str = "ar") -> str:
         f"Keep it short (1-2 sentences)."
     )
     return _call(prompt, temperature=0.7, max_tokens=200)
+
+
+async def generate_response(prompt: str) -> Optional[str]:
+    try:
+        return _call(prompt, temperature=0.7, max_tokens=300)
+    except Exception as e:
+        return None
