@@ -81,6 +81,7 @@ def transform_product_image(
         py = int(H * 0.3)
 
         if style_config.get("shadow"):
+            bg_rgba = bg.convert("RGBA")
             shadow = Image.new("RGBA", (img.width, img.height), (0, 0, 0, 0))
             sd = ImageDraw.Draw(shadow)
             sd.ellipse(
@@ -88,12 +89,12 @@ def transform_product_image(
                 fill=(0, 0, 0, 50),
             )
             shadow = shadow.filter(ImageFilter.GaussianBlur(radius=6))
-            bg_rgba = bg.convert("RGBA")
             bg_rgba.paste(shadow, (px, py), shadow)
             bg = bg_rgba
 
         bg_rgba = bg.convert("RGBA")
-        bg_rgba.paste(img, (px, py), img)
+        img_rgba = img.convert("RGBA")
+        bg_rgba.paste(img_rgba, (px, py), img_rgba)
 
         if style_config.get("border"):
             bg = ImageOps.expand(bg, border=12, fill=style_config["border_color"])
