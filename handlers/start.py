@@ -86,6 +86,7 @@ async def handle_menu_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     handler_map = {
         "✍️ إنشاء محتوى": post_start,
         "📦 عرض منتج": product_start,
+        "📸 تحسين صور": product_start,
         "📤 نشر تلقائي": publish_start,
         "📅 جدولة منشورات": schedule_start,
         "❓ المساعدة والدعم": help_command,
@@ -102,7 +103,7 @@ async def handle_menu_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 BUTTON_TEXTS = [
-    "✍️ إنشاء محتوى", "📦 عرض منتج",
+    "✍️ إنشاء محتوى", "📦 عرض منتج", "📸 تحسين صور",
     "📤 نشر تلقائي", "📅 جدولة منشورات",
     "👤 حسابي والاشتراك",
     "❓ المساعدة والدعم",
