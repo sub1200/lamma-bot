@@ -119,6 +119,10 @@ def transform_product_image(
 
 
 def generate_ai_image(prompt: str) -> Optional[bytes]:
+    from gemini_image import generate_image as gemini_gen
+    result = gemini_gen(prompt)
+    if result:
+        return result
     try:
         resp = requests.get(
             f"{POLLINATIONS_URL}/{quote(prompt)}",

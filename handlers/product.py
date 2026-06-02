@@ -10,6 +10,7 @@ from telegram.ext import (
 )
 
 from image_processor import STYLES, transform_product_image, text_to_image
+from gemini_image import edit_image as gemini_edit
 from video_generator import image_to_video
 from vision_analyzer import analyze_image
 from ai_generator import generate_response
@@ -99,14 +100,22 @@ async def handle_presentation_choice(update: Update, context: ContextTypes.DEFAU
 
     try:
         result = None
-        if style["type"] == "pillow":
-            pillow_style = "professional" if style_key == "standard" else "luxury"
-            result = transform_product_image(original, pillow_style, analysis)
-        elif style["type"] == "pollinations":
-            if style_key == "with_person":
-                prompt = f"A person wearing or holding {product_name}, professional product photography, white background, high quality, realistic"
-            else:
-                prompt = f"{product_name} being used in a real environment, professional lifestyle photography, natural lighting, high quality"
+        edit_prompt = None
+        if style_key == "standard":
+            edit_prompt = f"تحسين خلفية المنتج لخلفية بيضاء احترافية مع إضاءة ممتازة. حافظ على نفس المنتج"
+            result = gemini_edit(original, edit_prompt)
+            if not result:
+                result = transform_product_image(original, "professional", analysis)
+        elif style_key == "luxury":
+            edit_prompt = f"تحويل خلفية المنتج لخلفية فاخرة باللون الأسود والذهبي مع إضاءة درامية. حافظ على نفس المنتج"
+            result = gemini_edit(original, edit_prompt)
+            if not result:
+                result = transform_product_image(original, "luxury", analysis)
+        elif style_key == "with_person":
+            prompt = f"A person wearing or holding {product_name}, professional product photography, white background, high quality, realistic"
+            result = text_to_image(prompt)
+        elif style_key == "environment":
+            prompt = f"{product_name} being used in a real environment, professional lifestyle photography, natural lighting, high quality"
             result = text_to_image(prompt)
 
         if not result:
