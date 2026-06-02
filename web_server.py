@@ -176,13 +176,36 @@ def facebook_login(session_id: str):
     return redirect(f"https://www.facebook.com/v19.0/dialog/oauth?{urlencode(params)}")
 
 
+CALLBACK_LANDING = """
+<!DOCTYPE html>
+<html dir="rtl">
+<head><meta charset="UTF-8"><title>Lamma - تسجيل الدخول</title>
+<style>
+    body { font-family: sans-serif; background: linear-gradient(135deg, #667eea, #764ba2); min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; }
+    .card { background: white; border-radius: 20px; padding: 40px; text-align: center; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+    .icon { font-size: 64px; } h1 { color: #1a1a2e; } p { color: #666; line-height: 1.8; }
+</style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">🔐</div>
+        <h1>تسجيل الدخول عبر فيسبوك</h1>
+        <p>هذه الصفحة تستقبل بيانات تسجيل الدخول من فيسبوك.<br>
+        استخدم البوت على Telegram لبدء عملية الربط.</p>
+        <p style="font-size:13px;color:#999;">&copy; Lamma Bot</p>
+    </div>
+</body>
+</html>
+"""
+
+
 @app.route("/callback/facebook")
 def facebook_callback():
     code = request.args.get("code")
     session_id = request.args.get("state")
 
     if not code or not session_id:
-        return "معلمات غير صالحة.", 400
+        return CALLBACK_LANDING, 200
 
     session = get_session(session_id)
     if not session:

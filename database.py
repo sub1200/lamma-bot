@@ -3,6 +3,9 @@ import threading
 from datetime import datetime
 from typing import Optional
 
+from datetime import datetime, timedelta
+from typing import Optional
+
 from config import config
 
 
@@ -252,3 +255,67 @@ def set_reply_rule_enabled(rule_id: int):
         new_val = 0 if row["enabled"] else 1
         get_conn().execute("UPDATE auto_reply_rules SET enabled = ? WHERE id = ?", (new_val, rule_id))
         get_conn().commit()
+
+
+TRIAL_DAYS = 7
+TRIAL_CREDITS = 50
+
+
+def create_trial_subscription(user_id: int) -> bool:
+    conn = get_conn()
+    existing = conn.execute(
+        "SELECT id FROM subscriptions WHERE user_id = ? AND plan_type = 'trial'",
+        (user_id,),
+    ).fetchone()
+    if existing:
+        return False
+    start = datetime.utcnow().isoformat()
+    end = (datetime.utcnow() + timedelta(days=TRIAL_DAYS)).isoformat()
+    conn.execute(
+        "INSERT INTO subscriptions (user_id, plan_type, start_date, end_date, payment_status) VALUES (?, 'trial', ?, ?, 'active')",
+        (user_id, start, end),
+    )
+    conn.execute(
+        "UPDATE users SET plan = 'trial', credits = credits + ? WHERE user_id = ?",
+        (TRIAL_CREDITS, user_id),
+    )
+    conn.execute(
+        "INSERT INTO credit_logs (user_id, amount, action) VALUES (?, ?, 'trial_bonus')",
+        (user_id, TRIAL_CREDITS),
+    )
+    conn.commit()
+    return True
+
+
+def get_active_subscription(user_id: int) -> Optional[sqlite3.Row]:
+    conn = get_conn()
+    cur = conn.execute(
+        "SELECT * FROM subscriptions WHERE user_id = ? AND payment_status = 'active' ORDER BY id DESC LIMIT 1",
+        (user_id,),
+    )
+    return cur.fetchone()
+
+
+def is_trial_active(user_id: int) -> bool:
+    sub = get_active_subscription(user_id)
+    if not sub:
+        return False
+    if sub["plan_type"] != "trial":
+        return True
+    try:
+        end = datetime.fromisoformat(sub["end_date"])
+        return datetime.utcnow() < end
+    except (ValueError, TypeError):
+        return False
+
+
+def get_trial_days_remaining(user_id: int) -> int:
+    sub = get_active_subscription(user_id)
+    if not sub:
+        return 0
+    try:
+        end = datetime.fromisoformat(sub["end_date"])
+        remaining = (end - datetime.utcnow()).days
+        return max(0, remaining)
+    except (ValueError, TypeError):
+        return 0

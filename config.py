@@ -19,6 +19,8 @@ class Config:
     GITHUB_API_URL: str = "https://models.inference.ai.azure.com"
     GITHUB_MODEL: str = "gpt-4o-mini"
 
+    BASE_URL: str = os.getenv("BASE_URL", "http://localhost:5000")
+
     FACEBOOK_ACCESS_TOKEN: str = os.getenv("FACEBOOK_ACCESS_TOKEN", "")
     FACEBOOK_PAGE_ID: str = os.getenv("FACEBOOK_PAGE_ID", "")
 
