@@ -15,7 +15,7 @@ from config import config
 from database import init_db
 from handlers import register_handlers
 from scheduler import start_scheduler
-from web_server import app as flask_app, init_oauth_table
+from web_server import app as flask_app, init_oauth_tables as init_oauth_table
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
