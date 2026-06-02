@@ -1,5 +1,5 @@
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 from handlers.accounts import MAIN_KEYBOARD, ALL_ACCOUNT_TEXTS
 from database import register_user, create_trial_subscription, is_trial_active, get_user
