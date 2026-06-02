@@ -184,8 +184,11 @@ async def auto_reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if get_setting("ai_reply_enabled", "1") == "1":
         try:
+            product_info = context.user_data.get("product_description", "")
+            product_ctx = f"\nمعلومات عن المنتج الحالي: {product_info[:200]}" if product_info else ""
             response = await generate_response(
                 f"أنت مساعد دعم عملاء لمتجر إلكتروني. رد باختصار واحترافية بالعربية على: {text}"
+                f"{product_ctx}"
             )
             if response:
                 await update.message.reply_text(response)

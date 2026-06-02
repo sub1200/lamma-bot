@@ -85,6 +85,52 @@ async def analyze_image(image_bytes: bytes, prompt: str = None) -> str:
     return _vision_call(image_bytes, prompt)
 
 
+PRODUCT_CATEGORIES = {
+    "clothing": {"label": "ملابس", "styles": ["standard", "with_person", "environment", "luxury"], "has_sizes": True},
+    "shoes": {"label": "أحذية", "styles": ["standard", "with_person", "environment", "luxury"], "has_sizes": True},
+    "accessories": {"label": "إكسسوارات", "styles": ["standard", "with_person", "environment", "luxury"], "has_sizes": False},
+    "jewelry": {"label": "مجوهرات", "styles": ["standard", "luxury"], "has_sizes": False},
+    "watches": {"label": "ساعات", "styles": ["standard", "with_person", "environment", "luxury"], "has_sizes": False},
+    "food_beverage": {"label": "طعام وشراب", "styles": ["standard", "environment"], "has_sizes": True},
+    "drink": {"label": "مشروبات", "styles": ["standard", "environment"], "has_sizes": True},
+    "electronics": {"label": "إلكترونيات", "styles": ["standard", "environment", "luxury"], "has_sizes": False},
+    "furniture": {"label": "أثاث", "styles": ["standard", "environment", "luxury"], "has_sizes": True},
+    "home_decor": {"label": "ديكور منزلي", "styles": ["standard", "environment", "luxury"], "has_sizes": False},
+    "cosmetics": {"label": "مستحضرات تجميل", "styles": ["standard", "luxury"], "has_sizes": True},
+    "perfume": {"label": "عطور", "styles": ["standard", "luxury"], "has_sizes": True},
+    "skincare": {"label": "عناية بالبشرة", "styles": ["standard", "luxury"], "has_sizes": True},
+    "book": {"label": "كتاب", "styles": ["standard"], "has_sizes": False},
+    "toy": {"label": "لعبة", "styles": ["standard", "environment"], "has_sizes": False},
+    "sports": {"label": "معدات رياضية", "styles": ["standard", "environment", "luxury"], "has_sizes": True},
+    "bag": {"label": "حقائب", "styles": ["standard", "with_person", "environment", "luxury"], "has_sizes": True},
+    "other": {"label": "منتج", "styles": ["standard", "environment"], "has_sizes": False},
+}
+
+
+async def classify_product(image_bytes: bytes) -> dict:
+    prompt = (
+        "Analyze this product image. Determine its exact category.\n"
+        f"Categories: {', '.join(PRODUCT_CATEGORIES.keys())}\n\n"
+        "Reply in EXACTLY this format (use English words):\n"
+        "NAME: <product name in English, max 5 words>\n"
+        "CATEGORY: <one category from the list>\n"
+        "ARABIC: <product name in Arabic, max 5 words>\n"
+        "PRICE_GUESS: <estimated price range like 10-50 USD or 5-15 USD>\n"
+        "SIZES: <available sizes like S,M,L or 250ml,500ml,1L or N/A>\n"
+        "WEARABLE: <yes if humans wear/carry it on body, no otherwise>"
+    )
+    result = _vision_call(image_bytes, prompt)
+    data = {"name": "", "category": "other", "arabic": "", "price_guess": "", "sizes": "N/A", "wearable": "no"}
+    for line in result.split("\n"):
+        line = line.strip()
+        for key in ("NAME:", "CATEGORY:", "ARABIC:", "PRICE_GUESS:", "SIZES:", "WEARABLE:"):
+            if line.startswith(key):
+                data[key.lower().replace(":", "")] = line[len(key):].strip()
+    if data["category"] not in PRODUCT_CATEGORIES:
+        data["category"] = "other"
+    return data
+
+
 async def suggest_product_style(image_bytes: bytes) -> str:
     prompt = (
         "You are a product photography expert. "

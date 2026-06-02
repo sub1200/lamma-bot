@@ -11,7 +11,7 @@ from telegram.ext import (
 
 from image_processor import transform_product_image, text_to_image
 from video_generator import image_to_video
-from vision_analyzer import analyze_image
+from vision_analyzer import analyze_image, classify_product, PRODUCT_CATEGORIES
 from ai_generator import generate_response
 from database import save_post, add_reply_rule
 from facebook_publisher import publish_post as fb_publish
@@ -67,15 +67,23 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["product_analysis"] = analysis
 
+    classification = await classify_product(image_bytes)
+    context.user_data["product_class"] = classification
+
     product_name = analysis.replace("المنتج:", "").strip() if "المنتج:" in analysis else analysis
+    cat = classification.get("category", "other")
+    cat_info = PRODUCT_CATEGORIES.get(cat, PRODUCT_CATEGORIES["other"])
+
+    context.user_data["allowed_styles"] = cat_info["styles"]
 
     keyboard = [
-        [InlineKeyboardButton(v["label"], callback_data=f"pres_{k}")]
-        for k, v in PRESENTATION_STYLES.items()
+        [InlineKeyboardButton(PRESENTATION_STYLES[k]["label"], callback_data=f"pres_{k}")]
+        for k in cat_info["styles"]
     ]
 
     await update.message.reply_text(
-        f"✅ *تم التعرف على المنتج:*\n{product_name}\n\n"
+        f"✅ *تم التعرف على المنتج:*\n{product_name}\n"
+        f"📂 الفئة: {cat_info['label']}\n\n"
         f"🎨 اختر نمط العرض:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown",
@@ -87,13 +95,18 @@ async def handle_presentation_choice(update: Update, context: ContextTypes.DEFAU
     await query.answer()
 
     style_key = query.data.replace("pres_", "")
-    if style_key not in PRESENTATION_STYLES:
+    allowed = context.user_data.get("allowed_styles", [])
+    if style_key not in PRESENTATION_STYLES or (allowed and style_key not in allowed):
+        await query.edit_message_text("❌ هذا النمط غير متاح لهذا المنتج.")
         return
 
     style = PRESENTATION_STYLES[style_key]
     original = context.user_data.get("product_original")
     analysis = context.user_data.get("product_analysis", "")
-    product_name = analysis.replace("المنتج:", "").strip() if "المنتج:" in analysis else "المنتج"
+    classification = context.user_data.get("product_class", {})
+    product_name = classification.get("arabic") or analysis.replace("المنتج:", "").strip()
+    if not product_name or product_name == "المنتج":
+        product_name = analysis.replace("المنتج:", "").strip() if "المنتج:" in analysis else "المنتج"
 
     await query.edit_message_text(f"⏳ جاري إنشاء الصورة... ({style['label']})")
 
@@ -121,10 +134,25 @@ async def handle_presentation_choice(update: Update, context: ContextTypes.DEFAU
         context.user_data["product_image"] = result
         context.user_data["product_style"] = style_key
 
+        classification = context.user_data.get("product_class", {})
+        sizes = classification.get("sizes", "N/A")
+        price_guess = classification.get("price_guess", "")
+        price_info = f"\n💰 السعر المقترح: {price_guess}\n📏 المقاسات: {sizes}" if price_guess else ""
+
         await query.message.reply_photo(
             photo=result,
-            caption=f"✅ تم الإنشاء بنجاح - {style['label']}",
+            caption=f"✅ تم الإنشاء بنجاح - {style['label']}{price_info}",
         )
+
+        if price_guess:
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"💡 *اقتراح الذكاء الاصطناعي:*\n"
+                     f"السعر التقريبي: {price_guess}\n"
+                     f"المقاسات: {sizes}\n\n"
+                     "يمكنك تأكيد هذه المعلومات أو تغييرها من القائمة أدناه.",
+                parse_mode="Markdown",
+            )
 
         await _show_action_menu(context, query.message.chat_id)
 
@@ -157,7 +185,10 @@ async def handle_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     img = context.user_data.get("product_image")
     analysis = context.user_data.get("product_analysis", "")
-    product_name = analysis.replace("المنتج:", "").strip() if "المنتج:" in analysis else "المنتج"
+    classification = context.user_data.get("product_class", {})
+    product_name = classification.get("arabic") or analysis.replace("المنتج:", "").strip()
+    if not product_name or product_name == "المنتج":
+        product_name = analysis.replace("المنتج:", "").strip() if "المنتج:" in analysis else "المنتج"
 
     if action == "desc":
         if not img:
@@ -228,9 +259,10 @@ async def handle_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(f"❌ فشل النشر: {e}")
 
     elif action == "restyle":
+        allowed = context.user_data.get("allowed_styles", list(PRESENTATION_STYLES.keys()))
         keyboard = [
-            [InlineKeyboardButton(v["label"], callback_data=f"pres_{k}")]
-            for k, v in PRESENTATION_STYLES.items()
+            [InlineKeyboardButton(PRESENTATION_STYLES[k]["label"], callback_data=f"pres_{k}")]
+            for k in allowed
         ]
         await query.edit_message_text(
             "🎨 اختر نمط عرض آخر:",
