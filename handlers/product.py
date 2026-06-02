@@ -9,7 +9,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from image_processor import STYLES, transform_product_image, text_to_image
+from image_processor import transform_product_image, text_to_image
 from video_generator import image_to_video
 from vision_analyzer import analyze_image
 from ai_generator import generate_response
