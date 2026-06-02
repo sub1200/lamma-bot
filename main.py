@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 WEBHOOK_PATH = "/webhook"
 bot_app: Application = None
 bot_loop: asyncio.AbstractEventLoop = None
+last_init_error: str = ""
 
 
 @flask_app.route(WEBHOOK_PATH, methods=["POST"])
@@ -43,7 +44,8 @@ def webhook_handler():
 def health():
     if bot_app is not None and bot_app.running:
         return "Bot OK", 200
-    return "Starting...", 503
+    err = last_init_error or ""
+    return f"Starting... last_error: {err[:200]}", 503
 
 
 @flask_app.route("/test")
@@ -67,7 +69,7 @@ def run_flask():
 
 
 async def try_init_bot():
-    global bot_app, bot_loop
+    global bot_app, bot_loop, last_init_error
     bot_loop = asyncio.get_running_loop()
 
     req = HTTPXRequest(
@@ -77,7 +79,7 @@ async def try_init_bot():
         pool_timeout=30,
     )
 
-    for i in range(30):
+    for i in range(15):
         try:
             bot_app = (
                 Application.builder()
@@ -97,12 +99,14 @@ async def try_init_bot():
             webhook_url = f"{base_url}{WEBHOOK_PATH}"
             await bot_app.bot.set_webhook(url=webhook_url)
             logger.info(f"Bot ready! Webhook: {webhook_url}")
+            last_init_error = ""
             return
         except Exception as e:
-            logger.warning(f"Bot init attempt {i+1}/30 failed: {e}")
-            await asyncio.sleep(10 * (i + 1))
+            last_init_error = str(e)
+            logger.warning(f"Bot init attempt {i+1}/15 failed: {e}")
+            await asyncio.sleep(5)
 
-    logger.error("Bot init failed after 30 attempts — Flask still running")
+    logger.error("Bot init failed after 15 attempts — Flask still running")
 
 
 async def bot_main():
