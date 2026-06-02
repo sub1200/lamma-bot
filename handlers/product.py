@@ -11,24 +11,38 @@ from telegram.ext import (
 
 from image_processor import STYLES, transform_product_image, text_to_image
 from video_generator import image_to_video
-from vision_analyzer import analyze_image, suggest_product_style
-from database import save_post
+from vision_analyzer import analyze_image
+from ai_generator import generate_response
+from database import save_post, add_reply_rule
 from facebook_publisher import publish_post as fb_publish
-from instagram_publisher import publish_post as ig_publish
+from facebook_publisher import get_page_id
+import requests
+
 logger = logging.getLogger(__name__)
 
 AWAITING_PHOTO = {}
-AWAITING_ACTION = {}
-AWAITING_IMAGINE = {}
+AWAITING_DESC_EDIT = {}
+AWAITING_PRICE = {}
+
+PRESENTATION_STYLES = {
+    "standard": {"label": "🖼️ عرض احترافي", "type": "pillow"},
+    "with_person": {"label": "👤 مع شخص يرتديه", "type": "pollinations"},
+    "environment": {"label": "🏠 في بيئة استخدام", "type": "pollinations"},
+    "luxury": {"label": "💎 عرض فاخر", "type": "pillow"},
+}
 
 
 async def product_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     AWAITING_PHOTO[user_id] = True
-
     await update.message.reply_text(
-        "📸 **تصوير المنتج**\n\n"
-        "أرسل لي صورة المنتج وسأحولها لك بأنماط احترافية!",
+        "📦 *عرض المنتج*\n\n"
+        "أرسل لي صورة المنتج وسأقوم بـ:\n"
+        "1️⃣ تحليل المنتج بالذكاء الاصطناعي\n"
+        "2️⃣ عرضه بأنماط احترافية\n"
+        "3️⃣ إنشاء وصف تسويقي احترافي\n"
+        "4️⃣ نشره مباشرة على فيسبوك\n\n"
+        "🚀 ابدأ بإرسال الصورة:",
         parse_mode="Markdown",
     )
 
@@ -41,96 +55,92 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo_file = await update.message.photo[-1].get_file()
     image_bytes = bytes(await photo_file.download_as_bytearray())
     context.user_data["product_original"] = image_bytes
-
     AWAITING_PHOTO.pop(user_id, None)
 
-    await update.message.reply_text("🔍 جاري تحليل المنتج... اقتراح النمط المناسب قادم!")
+    await update.message.reply_text("🔍 جاري تحليل المنتج...")
 
     analysis = await analyze_image(
         image_bytes,
-        "Analyze this product in Arabic. Identify what it is, its color, material, and shape. "
-        "Then suggest the best presentation style from these options: "
-        "professional, lifestyle, 3d_mockup, minimalist, social_media, luxury. "
-        "Keep your response to 3 short sentences.",
+        "Analyze this product in Arabic. Identify what it is (name, type), color, material, shape. "
+        "Reply with only: 'المنتج: [name] - [color] - [material]'. Max 20 words.",
     )
 
-    context.user_data["product_description"] = analysis
-    AWAITING_ACTION[user_id] = True
+    context.user_data["product_analysis"] = analysis
 
-    keyboard = []
-    for key, style in STYLES.items():
-        label = style["label"]
-        keyboard.append([InlineKeyboardButton(label, callback_data=f"style_{key}")])
+    product_name = analysis.replace("المنتج:", "").strip() if "المنتج:" in analysis else analysis
+
+    keyboard = [
+        [InlineKeyboardButton(v["label"], callback_data=f"pres_{k}")]
+        for k, v in PRESENTATION_STYLES.items()
+    ]
 
     await update.message.reply_text(
-        f"🔍 **تحليل المنتج:**\n{analysis}\n\nاختر نمط العرض:",
+        f"✅ *تم التعرف على المنتج:*\n{product_name}\n\n"
+        f"🎨 اختر نمط العرض:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown",
     )
 
 
-async def handle_style_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_presentation_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    user_id = update.effective_user.id
-    if user_id not in AWAITING_ACTION:
+    style_key = query.data.replace("pres_", "")
+    if style_key not in PRESENTATION_STYLES:
         return
 
-    style_key = query.data.replace("style_", "")
-    if style_key not in STYLES:
-        return
-
+    style = PRESENTATION_STYLES[style_key]
     original = context.user_data.get("product_original")
-    if not original:
-        await query.edit_message_text("❌ الصورة غير موجودة. استخدم /product مرة أخرى.")
-        AWAITING_ACTION.pop(user_id, None)
-        return
+    analysis = context.user_data.get("product_analysis", "")
+    product_name = analysis.replace("المنتج:", "").strip() if "المنتج:" in analysis else "المنتج"
 
-    await query.edit_message_text(f"⏳ جاري تحويل الصورة... ({STYLES[style_key]['label']})")
+    await query.edit_message_text(f"⏳ جاري إنشاء الصورة... ({style['label']})")
 
     try:
-        description = context.user_data.get("product_description", "")
-        result = transform_product_image(original, style_key, description)
-        if result is None:
-            await query.edit_message_text(
-                "❌ فشل التحويل.\n"
-                "تأكد من اتصال الإنترنت."
-            )
-            AWAITING_ACTION.pop(user_id, None)
+        result = None
+        if style["type"] == "pillow":
+            pillow_style = "professional" if style_key == "standard" else "luxury"
+            result = transform_product_image(original, pillow_style, analysis)
+        elif style["type"] == "pollinations":
+            if style_key == "with_person":
+                prompt = f"A person wearing or holding {product_name}, professional product photography, white background, high quality, realistic"
+            else:
+                prompt = f"{product_name} being used in a real environment, professional lifestyle photography, natural lighting, high quality"
+            result = text_to_image(prompt)
+
+        if not result:
+            await query.edit_message_text("❌ فشل إنشاء الصورة. حاول مرة أخرى.")
             return
 
-        context.user_data["product_transformed"] = result
+        context.user_data["product_image"] = result
         context.user_data["product_style"] = style_key
-        AWAITING_ACTION.pop(user_id, None)
 
         await query.message.reply_photo(
             photo=result,
-            caption=f"✅ تم التحويل بنمط: {STYLES[style_key]['label']}",
+            caption=f"✅ تم الإنشاء بنجاح - {style['label']}",
         )
 
         await _show_action_menu(context, query.message.chat_id)
 
     except Exception as e:
-        logger.error(f"Transform error: {e}")
+        logger.error(f"Presentation error: {e}")
         await query.edit_message_text(f"❌ خطأ: {e}")
-        AWAITING_ACTION.pop(user_id, None)
 
 
 async def _show_action_menu(context, chat_id: int):
     keyboard = [
-        [InlineKeyboardButton("🔍 تحليل الصورة", callback_data="act_analyze")],
-        [InlineKeyboardButton("🎬 تحويل إلى فيديو", callback_data="act_animate")],
+        [InlineKeyboardButton("✍️ وصف احترافي للمنتج", callback_data="act_desc")],
+        [InlineKeyboardButton("🎬 تحويل إلى فيديو", callback_data="act_video")],
         [InlineKeyboardButton("📤 نشر على فيسبوك", callback_data="act_fb")],
-        [InlineKeyboardButton("📤 نشر على انستغرام", callback_data="act_ig")],
-        [InlineKeyboardButton("🔄 نمط آخر", callback_data="act_restyle")],
-        [InlineKeyboardButton("✅ تم", callback_data="act_done")],
+        [InlineKeyboardButton("🔄 نمط عرض آخر", callback_data="act_restyle")],
+        [InlineKeyboardButton("✅ تم - إضافة السعر والمقاسات", callback_data="act_price")],
     ]
-
     await context.bot.send_message(
         chat_id=chat_id,
-        text="ماذا تريد أن تفعل بالصورة؟",
+        text="📋 *ماذا تريد أن تفعل الآن؟*",
         reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown",
     )
 
 
@@ -139,132 +149,170 @@ async def handle_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     action = query.data.replace("act_", "")
+    user_id = update.effective_user.id
+    img = context.user_data.get("product_image")
+    analysis = context.user_data.get("product_analysis", "")
+    product_name = analysis.replace("المنتج:", "").strip() if "المنتج:" in analysis else "المنتج"
 
-    if action == "analyze":
-        img = context.user_data.get("product_transformed")
+    if action == "desc":
         if not img:
             await query.edit_message_text("❌ لا توجد صورة.")
             return
+        await query.edit_message_text("✍️ جاري كتابة وصف احترافي...")
+        desc = await generate_response(
+            f"Write a professional product description in Arabic for '{product_name}'. "
+            f"Make it persuasive and suitable for Facebook. Include features, benefits, "
+            f"and a call to action. 3-4 sentences. Analysis: {analysis[:200]}"
+        )
+        if not desc:
+            desc = f"🔥 {product_name} المثالي لعملائك! الجودة العالية والتصميم الأنيق - اطلبه الآن!"
+        context.user_data["product_description"] = desc
+        AWAITING_DESC_EDIT[user_id] = True
+        await query.message.reply_text(
+            f"✍️ *الوصف المقترح:*\n\n{desc}\n\n"
+            "📝 هل تريد إضافة أو تعديل شيء؟\n"
+            "أرسل التعديلات، أو أرسل /تم للاعتماد.",
+            parse_mode="Markdown",
+        )
 
-        await query.edit_message_text("🔍 جاري تحليل الصورة...")
-        result = await analyze_image(img, "Describe this image in detail in Arabic")
-        await query.message.reply_text(f"🔍 **التحليل:**\n\n{result}", parse_mode="Markdown")
-        await _show_action_menu(context, query.message.chat_id)
-
-    elif action == "animate":
-        img = context.user_data.get("product_transformed")
+    elif action == "video":
         if not img:
             await query.edit_message_text("❌ لا توجد صورة.")
             return
-
-        await query.edit_message_text("🎬 جاري إنشاء الفيديو...")
+        await query.edit_message_text("🎬 جاري تحويل الصورة إلى فيديو...")
         video = image_to_video(img)
         if not video:
             await query.edit_message_text(
-                "❌ فشل إنشاء الفيديو. تأكد من تثبيت FFmpeg:\n"
-                "sudo apt install ffmpeg"
+                "❌ تحويل الفيديو غير متاح حالياً (FFmpeg غير مثبت).\n"
+                "يمكنك المتابعة بخيارات أخرى."
             )
             return
-
         context.user_data["product_video"] = video
-        await query.message.reply_video(video=video, caption="🎬 فيديو العرض")
+        await query.message.reply_video(video=video, caption="🎬 فيديو عرض المنتج")
         await _show_action_menu(context, query.message.chat_id)
 
     elif action == "fb":
-        img = context.user_data.get("product_transformed")
         if not img:
             await query.edit_message_text("❌ لا توجد صورة.")
             return
-
+        desc = context.user_data.get("product_description", f"🔥 {product_name} - اطلبه الآن!")
         await query.edit_message_text("📤 جاري النشر على فيسبوك...")
         try:
-            post_id = fb_publish("منتج جديد 🎉")
-            save_post("منتج جديد 🎉", "facebook", post_id, "published")
-            await query.edit_message_text("✅ تم النشر على فيسبوك!")
-        except Exception as e:
-            await query.edit_message_text(f"❌ فشل النشر: {e}")
+            page_id = get_page_id()
+            token = None
+            from database import get_account
+            account = get_account("facebook")
+            if account:
+                token = account["token"]
+            if not page_id or not token:
+                await query.edit_message_text("❌ لم يتم ربط حساب فيسبوك. استخدم /account أولاً.")
+                return
 
-    elif action == "ig":
-        img = context.user_data.get("product_transformed")
-        if not img:
-            await query.edit_message_text("❌ لا توجد صورة.")
-            return
-
-        await query.edit_message_text("📤 جاري النشر على انستغرام...")
-        try:
-            post_id = ig_publish("منتج جديد 🎉")
-            save_post("منتج جديد 🎉", "instagram", post_id, "published")
-            await query.edit_message_text("✅ تم النشر على انستغرام!")
+            upload_url = f"https://graph.facebook.com/v19.0/{page_id}/photos"
+            resp = requests.post(upload_url, data={
+                "caption": desc,
+                "access_token": token,
+            }, files={"source": ("product.jpg", img, "image/jpeg")})
+            data = resp.json()
+            if "id" in data:
+                save_post(desc, "facebook", data["id"], "published")
+                await query.edit_message_text("✅ تم النشر على فيسبوك بنجاح!")
+            else:
+                await query.edit_message_text(f"❌ فشل النشر: {data}")
         except Exception as e:
             await query.edit_message_text(f"❌ فشل النشر: {e}")
 
     elif action == "restyle":
-        user_id = update.effective_user.id
-        AWAITING_ACTION[user_id] = True
-
-        keyboard = []
-        for key, style in STYLES.items():
-            keyboard.append([InlineKeyboardButton(style["label"], callback_data=f"style_{key}")])
-
+        keyboard = [
+            [InlineKeyboardButton(v["label"], callback_data=f"pres_{k}")]
+            for k, v in PRESENTATION_STYLES.items()
+        ]
         await query.edit_message_text(
-            "اختر نمطاً آخر:",
+            "🎨 اختر نمط عرض آخر:",
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
 
-    elif action == "done":
-        for k in ["product_original", "product_transformed", "product_video", "product_style"]:
-            context.user_data.pop(k, None)
-
+    elif action == "price":
         await query.edit_message_text(
-            "✅ تم الانتهاء!\n"
-            "استخدم /product لتصوير منتج جديد.",
+            "📏 *إضافة السعر والمقاسات*\n\n"
+            "أرسل سعر المنتج والمقاسات المتوفرة (إن وجدت).\n"
+            "مثال: `السعر: 50$ - المقاسات: M, L, XL`\n\n"
+            "هذه المعلومات ستُستخدم للرد التلقائي على استفسارات الزبائن.",
+            parse_mode="Markdown",
         )
+        AWAITING_PRICE[user_id] = True
 
 
-async def imagine_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_desc_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if context.args:
-        prompt = " ".join(context.args)
-        await update.message.reply_text("⏳ جاري إنشاء الصورة...")
-        result = text_to_image(prompt)
-        if result:
-            await update.message.reply_photo(photo=result, caption=f"🎨 {prompt}")
-        else:
-            await update.message.reply_text("❌ فشل إنشاء الصورة. حاول مرة أخرى.")
+    if user_id not in AWAITING_DESC_EDIT:
         return
-    AWAITING_IMAGINE[user_id] = True
+
+    text = update.message.text.strip()
+    if text == "/تم":
+        AWAITING_DESC_EDIT.pop(user_id, None)
+        desc = context.user_data.get("product_description", "")
+        await update.message.reply_text(
+            f"✅ *تم اعتماد الوصف!*\n\n{desc}\n\n"
+            "يمكنك الآن نشر الصورة على فيسبوك من القائمة.",
+            parse_mode="Markdown",
+        )
+        chat_id = update.effective_chat.id
+        await _show_action_menu(context, chat_id)
+        return
+
+    new_desc = text
+    context.user_data["product_description"] = new_desc
+    AWAITING_DESC_EDIT.pop(user_id, None)
     await update.message.reply_text(
-        "🎨 **إنشاء صورة بالذكاء الاصطناعي**\n\n"
-        "أرسل لي وصفاً للصورة التي تريدها:\n"
-        "مثال: 'قطة تجلس على أريكة في غرفة معيشة'\n\n"
-        "أو استخدم: /imagine <الوصف>",
+        f"✅ *تم تحديث الوصف!*\n\n{new_desc}\n\n"
+        "📤 يمكنك الآن النشر على فيسبوك.",
+        parse_mode="Markdown",
+    )
+    chat_id = update.effective_chat.id
+    await _show_action_menu(context, chat_id)
+
+
+async def handle_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in AWAITING_PRICE:
+        return
+    AWAITING_PRICE.pop(user_id, None)
+
+    price_text = update.message.text.strip()
+    analysis = context.user_data.get("product_analysis", "")
+    product_name = analysis.replace("المنتج:", "").strip() if "المنتج:" in analysis else "المنتج"
+
+    add_reply_rule("telegram", product_name, f"سعر {product_name}: {price_text}")
+
+    context.user_data.pop("product_original", None)
+    context.user_data.pop("product_image", None)
+    context.user_data.pop("product_video", None)
+    context.user_data.pop("product_description", None)
+    context.user_data.pop("product_analysis", None)
+
+    await update.message.reply_text(
+        f"✅ *تم حفظ معلومات المنتج!*\n\n"
+        f"📦 المنتج: {product_name}\n"
+        f"💰 السعر: {price_text}\n\n"
+        "🤖 سيتم استخدام هذه المعلومات للرد التلقائي على استفسارات الزبائن.\n\n"
+        "للبدء بمنتج جديد، استخدم /product",
         parse_mode="Markdown",
     )
 
 
-async def handle_imagine_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in AWAITING_IMAGINE:
-        return
-    AWAITING_IMAGINE.pop(user_id, None)
-
-    prompt = update.message.text
-    await update.message.reply_text("⏳ جاري إنشاء الصورة... قد يستغرق دقيقة")
-
-    result = text_to_image(prompt)
-    if result:
-        await update.message.reply_photo(
-            photo=result,
-            caption=f"🎨 تم إنشاء الصورة\nالوصف: {prompt}",
-        )
-    else:
-        await update.message.reply_text("❌ فشل إنشاء الصورة. حاول مرة أخرى.")
-
-
 def product_handlers(app):
     app.add_handler(CommandHandler("product", product_start))
-    app.add_handler(CommandHandler("imagine", imagine_start))
+    app.add_handler(CommandHandler("imagine", product_start))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_imagine_text))
-    app.add_handler(CallbackQueryHandler(handle_style_choice, pattern="^style_"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
+    app.add_handler(CallbackQueryHandler(handle_presentation_choice, pattern="^pres_"))
     app.add_handler(CallbackQueryHandler(handle_action, pattern="^act_"))
+
+
+async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id in AWAITING_DESC_EDIT:
+        await handle_desc_edit(update, context)
+    elif user_id in AWAITING_PRICE:
+        await handle_price(update, context)

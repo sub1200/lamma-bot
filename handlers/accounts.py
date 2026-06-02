@@ -15,7 +15,7 @@ from config import config
 
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
-        [KeyboardButton("✍️ إنشاء محتوى"), KeyboardButton("📸 تحسين صور")],
+        [KeyboardButton("✍️ إنشاء محتوى"), KeyboardButton("📦 عرض منتج")],
         [KeyboardButton("📤 نشر تلقائي"), KeyboardButton("📅 جدولة منشورات")],
         [KeyboardButton("👤 حسابي والاشتراك")],
         [KeyboardButton("❓ المساعدة والدعم")]
@@ -132,7 +132,7 @@ async def credit_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💰 الرصيد الحالي: `{credits} نقطة`\n\n"
         "يتم خصم نقطة واحدة لكل:\n"
         "• إنشاء منشور ✍️\n"
-        "• تحسين صورة 📸\n"
+        "• عرض منتج 📦\n"
         "• تحليل صورة 🔍\n"
         "• رد تلقائي بالذكاء الاصطناعي 🤖",
         parse_mode="Markdown",

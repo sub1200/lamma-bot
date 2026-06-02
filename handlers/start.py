@@ -61,7 +61,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "❓ *دليل المساعدة:*\n\n"
         "✍️ *إنشاء محتوى:* كتابة منشورات إبداعية بالـ AI\n"
-        "📸 *تحسين صور:* تحويل صور منتجاتك لصور احترافية\n"
+        "📦 *عرض منتج:* تصوير المنتج وعرضه بأنماط احترافية\n"
         "📤 *نشر تلقائي:* جدولة ونشر المحتوى على السوشيال ميديا\n"
         "👤 *حسابي:* إدارة اشتراكك ونقاطك\n\n"
         "يمكنك البدء بالضغط على الأزرار أدناه 👇"
@@ -85,7 +85,7 @@ async def handle_menu_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     handler_map = {
         "✍️ إنشاء محتوى": post_start,
-        "📸 تحسين صور": product_start,
+        "📦 عرض منتج": product_start,
         "📤 نشر تلقائي": publish_start,
         "📅 جدولة منشورات": schedule_start,
         "❓ المساعدة والدعم": help_command,
@@ -102,7 +102,7 @@ async def handle_menu_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 BUTTON_TEXTS = [
-    "✍️ إنشاء محتوى", "📸 تحسين صور",
+    "✍️ إنشاء محتوى", "📦 عرض منتج",
     "📤 نشر تلقائي", "📅 جدولة منشورات",
     "👤 حسابي والاشتراك",
     "❓ المساعدة والدعم",
