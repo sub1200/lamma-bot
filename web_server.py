@@ -15,8 +15,6 @@ app = Flask(__name__)
 
 FACEBOOK_APP_ID = os.getenv("FACEBOOK_APP_ID", "")
 FACEBOOK_APP_SECRET = os.getenv("FACEBOOK_APP_SECRET", "")
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 BASE_URL = os.getenv("BASE_URL", "http://localhost:5000")
 
 LOGIN_PAGE = """
@@ -65,14 +63,7 @@ LOGIN_PAGE = """
             transition: transform 0.2s, box-shadow 0.2s;
         }
         .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
-        .btn-google { background: #fff; color: #333; border: 1px solid #ddd; }
         .btn-facebook { background: #1877f2; color: white; }
-        .divider {
-            display: flex; align-items: center; gap: 10px; margin: 20px 0; color: #aaa;
-        }
-        .divider::before, .divider::after {
-            content: ""; flex: 1; height: 1px; background: #eee;
-        }
         .note { color: #aaa; font-size: 13px; margin-top: 20px; }
     </style>
 </head>
@@ -80,11 +71,7 @@ LOGIN_PAGE = """
     <div class="card">
         <div class="logo">🤖</div>
         <h1>Lamma</h1>
-        <p class="sub">سجل دخولك لبدء استخدام البوت</p>
-        <a href="{{ google_url }}" class="btn btn-google">
-            <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-            تسجيل الدخول بحساب Google
-        </a>
+        <p class="sub">سجل دخولك بحساب فيسبوك لبدء استخدام البوت</p>
         <a href="{{ facebook_url }}" class="btn btn-facebook">
             تسجيل الدخول بحساب فيسبوك
         </a>
@@ -189,79 +176,13 @@ def login_page(session_id: str):
     if not session:
         return "الرابط غير صالح أو منتهي الصلاحية.", 404
 
-    google_url = f"{BASE_URL}/google_login/{session_id}"
     facebook_url = f"{BASE_URL}/facebook_login/{session_id}"
 
     return render_template_string(
         LOGIN_PAGE,
-        google_url=google_url,
         facebook_url=facebook_url,
         base_url=BASE_URL,
     )
-
-
-@app.route("/google_login/<session_id>")
-def google_login(session_id: str):
-    session = get_session(session_id)
-    if not session:
-        return "الرابط غير صالح.", 404
-
-    params = {
-        "client_id": GOOGLE_CLIENT_ID,
-        "redirect_uri": f"{BASE_URL}/callback/google",
-        "state": session_id,
-        "scope": "openid email profile",
-        "response_type": "code",
-        "access_type": "offline",
-        "prompt": "consent",
-    }
-    return redirect(f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}")
-
-
-@app.route("/callback/google")
-def google_callback():
-    code = request.args.get("code")
-    session_id = request.args.get("state")
-
-    if not code or not session_id:
-        return "<h1>خطأ: معلمات غير صالحة</h1>", 400
-
-    session = get_session(session_id)
-    if not session:
-        return "الجلسة غير صالحة.", 404
-
-    token_resp = requests.post("https://oauth2.googleapis.com/token", data={
-        "code": code,
-        "client_id": GOOGLE_CLIENT_ID,
-        "client_secret": GOOGLE_CLIENT_SECRET,
-        "redirect_uri": f"{BASE_URL}/callback/google",
-        "grant_type": "authorization_code",
-    })
-    token_data = token_resp.json()
-
-    if "access_token" not in token_data:
-        logger.error(f"Google token exchange failed: {token_data}")
-        return "فشل تسجيل الدخول بحساب Google.", 400
-
-    access_token = token_data["access_token"]
-
-    user_resp = requests.get("https://www.googleapis.com/oauth2/v2/userinfo", headers={
-        "Authorization": f"Bearer {access_token}",
-    })
-    user_data = user_resp.json()
-
-    email = user_data.get("email", "")
-    name = user_data.get("name", "")
-    google_id = user_data.get("id", "")
-
-    telegram_user_id = session["user_id"]
-    register_user(telegram_user_id)
-    create_trial_subscription(telegram_user_id)
-    link_account(telegram_user_id, "google", google_id, email, name, access_token)
-
-    update_session(session_id, status="linked", email=email, provider_name=name, token=access_token)
-
-    return SUCCESS_PAGE
 
 
 @app.route("/facebook_login/<session_id>")

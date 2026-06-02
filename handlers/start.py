@@ -6,16 +6,15 @@ from database import register_user, create_trial_subscription, is_trial_active, 
 
 
 LOGIN_KEYBOARD = InlineKeyboardMarkup([
-    [InlineKeyboardButton("تسجيل الدخول بحساب Google 🌐", callback_data="login_google")],
     [InlineKeyboardButton("تسجيل الدخول بحساب فيسبوك 🔵", callback_data="login_facebook")],
 ])
 
 WELCOME_FIRST = (
     "🎉 *مرحباً بك في Lamma!*\n\n"
     "أنا مساعدك الذكي لإدارة أعمالك على السوشيال ميديا.\n"
-    "لتتمكن من استخدام البوت، يرجى تسجيل الدخول بأحد الحسابات التالية:\n\n"
-    "• **Google** - تسجيل سريع بالبريد الإلكتروني\n"
-    "• **فيسبوك** - لربط صفحتك والنشر مباشرة\n\n"
+    "لتتمكن من استخدام البوت، يرجى تسجيل الدخول بحساب فيسبوك:\n\n"
+    "• ربط صفحتك والنشر مباشرة\n"
+    "• إدارة حسابات متعددة\n\n"
     "🚀 *اشتراك تجريبي مجاني لمدة 7 أيام + 50 نقطة هدية!*"
 )
 
