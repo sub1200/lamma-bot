@@ -1,22 +1,21 @@
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes
 
 from handlers.accounts import MAIN_KEYBOARD, ALL_ACCOUNT_TEXTS
 from database import register_user, create_trial_subscription, is_trial_active, get_user
 
-REGISTER_KEYBOARD = ReplyKeyboardMarkup(
-    [[KeyboardButton("📝 إنشاء حساب جديد")]],
-    resize_keyboard=True,
-)
+
+LOGIN_KEYBOARD = InlineKeyboardMarkup([
+    [InlineKeyboardButton("تسجيل الدخول بحساب Google 🌐", callback_data="login_google")],
+    [InlineKeyboardButton("تسجيل الدخول بحساب فيسبوك 🔵", callback_data="login_facebook")],
+])
 
 WELCOME_FIRST = (
     "🎉 *مرحباً بك في Lamma!*\n\n"
     "أنا مساعدك الذكي لإدارة أعمالك على السوشيال ميديا.\n"
-    "أنشئ حسابك المجاني الآن وابدأ:\n\n"
-    "✅ إنشاء منشورات بالذكاء الاصطناعي\n"
-    "📸 تحويل صور المنتجات لصور احترافية\n"
-    "📤 نشر تلقائي على فيسبوك\n"
-    "🤖 ردود تلقائية ذكية\n\n"
+    "لتتمكن من استخدام البوت، يرجى تسجيل الدخول بأحد الحسابات التالية:\n\n"
+    "• **Google** - تسجيل سريع بالبريد الإلكتروني\n"
+    "• **فيسبوك** - لربط صفحتك والنشر مباشرة\n\n"
     "🚀 *اشتراك تجريبي مجاني لمدة 7 أيام + 50 نقطة هدية!*"
 )
 
@@ -35,26 +34,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if existing:
         await update.message.reply_text(WELCOME_TEXT, reply_markup=MAIN_KEYBOARD)
     else:
-        await update.message.reply_text(WELCOME_FIRST, reply_markup=REGISTER_KEYBOARD, parse_mode="Markdown")
+        await update.message.reply_text(WELCOME_FIRST, reply_markup=LOGIN_KEYBOARD, parse_mode="Markdown")
 
 
-async def register_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_id = user.id
-    existing = get_user(user_id)
-    if existing:
-        await update.message.reply_text("✅ حسابك مسجل بالفعل!", reply_markup=MAIN_KEYBOARD)
-        return
-    register_user(user_id, user.username or "", user.full_name or "")
-    create_trial_subscription(user_id)
-    await update.message.reply_text(
-        "✅ *تم تسجيل حسابك بنجاح!*\n\n"
-        "🎁 حصلت على:\n"
-        "• 7 أيام تجربة مجانية\n"
-        "• 50 نقطة مجانية\n\n"
-        "استخدم القائمة للبدء 👇",
-        reply_markup=MAIN_KEYBOARD,
+async def login_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    from web_server import create_session
+    user_id = update.effective_user.id
+    session_id = create_session(user_id, query.data.replace("login_", ""))
+    base_url = "https://lamma-bot.onrender.com"
+    link = f"{base_url}/login/{session_id}"
+    await query.edit_message_text(
+        "📤 *رابط تسجيل الدخول*\n\n"
+        "اضغط الرابط أدناه لإتمام التسجيل:\n\n"
+        f"🔗 {link}\n\n"
+        "⏰ الرابط صالح لمدة 24 ساعة\n"
+        "بعد التسجيل، عد واضغط /start للدخول.",
         parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔗 فتح رابط التسجيل", url=link)]
+        ]),
     )
 
 
@@ -64,8 +64,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✍️ *إنشاء محتوى:* كتابة منشورات إبداعية بالـ AI\n"
         "📸 *تحسين صور:* تحويل صور منتجاتك لصور احترافية\n"
         "📤 *نشر تلقائي:* جدولة ونشر المحتوى على السوشيال ميديا\n"
-        "👤 *حسابي:* إدارة اشتراكك ونقاطك\n"
-        "⚙️ *إعدادات:* ضبط تفضيلات البوت\n\n"
+        "👤 *حسابي:* إدارة اشتراكك ونقاطك\n\n"
         "يمكنك البدء بالضغط على الأزرار أدناه 👇"
     )
     await update.message.reply_text(text, reply_markup=MAIN_KEYBOARD, parse_mode="Markdown")
@@ -79,7 +78,6 @@ async def handle_menu_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     from handlers.publish import publish_start
     from handlers.schedule import schedule_start
     from handlers.accounts import accounts_menu, get_account_handler
-    from handlers.settings import settings_menu
 
     account_handler = get_account_handler(text)
     if account_handler:
@@ -91,7 +89,6 @@ async def handle_menu_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         "📸 تحسين صور": product_start,
         "📤 نشر تلقائي": publish_start,
         "📅 جدولة منشورات": schedule_start,
-        "⚙️ إعدادات البوت": settings_menu,
         "❓ المساعدة والدعم": help_command,
     }
 
@@ -108,7 +105,7 @@ async def handle_menu_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
 BUTTON_TEXTS = [
     "✍️ إنشاء محتوى", "📸 تحسين صور",
     "📤 نشر تلقائي", "📅 جدولة منشورات",
-    "👤 حسابي والاشتراك", "⚙️ إعدادات البوت",
+    "👤 حسابي والاشتراك",
     "❓ المساعدة والدعم",
 ] + ALL_ACCOUNT_TEXTS
 
@@ -117,5 +114,5 @@ def start_handler(app):
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", start))
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(MessageHandler(filters.Regex("^📝 إنشاء حساب جديد$"), register_new))
+    app.add_handler(CallbackQueryHandler(login_choice, pattern="^login_"))
     app.add_handler(MessageHandler(filters.Text(BUTTON_TEXTS), handle_menu_buttons))

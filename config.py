@@ -21,6 +21,9 @@ class Config:
 
     BASE_URL: str = os.getenv("BASE_URL", "http://localhost:5000")
 
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+
     FACEBOOK_ACCESS_TOKEN: str = os.getenv("FACEBOOK_ACCESS_TOKEN", "")
     FACEBOOK_PAGE_ID: str = os.getenv("FACEBOOK_PAGE_ID", "")
 

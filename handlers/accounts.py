@@ -17,7 +17,7 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
         [KeyboardButton("✍️ إنشاء محتوى"), KeyboardButton("📸 تحسين صور")],
         [KeyboardButton("📤 نشر تلقائي"), KeyboardButton("📅 جدولة منشورات")],
-        [KeyboardButton("👤 حسابي والاشتراك"), KeyboardButton("⚙️ إعدادات البوت")],
+        [KeyboardButton("👤 حسابي والاشتراك")],
         [KeyboardButton("❓ المساعدة والدعم")]
     ],
     resize_keyboard=True,

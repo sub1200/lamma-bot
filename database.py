@@ -79,11 +79,23 @@ def init_db():
             user_id INTEGER PRIMARY KEY,
             username TEXT,
             full_name TEXT,
+            email TEXT DEFAULT '',
             language TEXT DEFAULT 'ar',
             plan TEXT DEFAULT 'free',
             credits INTEGER DEFAULT 10,
             registration_date TEXT DEFAULT (datetime('now')),
             last_active TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS linked_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            provider TEXT NOT NULL,
+            provider_id TEXT,
+            email TEXT,
+            name TEXT,
+            token TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
         );
 
         CREATE TABLE IF NOT EXISTS subscriptions (
