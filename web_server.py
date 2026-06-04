@@ -330,6 +330,44 @@ def privacy_policy():
     """
 
 
+@app.route("/terms")
+def terms_of_service():
+    return """
+    <!DOCTYPE html>
+    <html dir="rtl">
+    <head><meta charset="UTF-8"><title>شروط الخدمة</title>
+    <style>body{font-family:sans-serif;padding:40px;max-width:700px;margin:auto;line-height:1.8}
+    h1{color:#333}</style>
+    </head>
+    <body>
+        <h1>شروط الخدمة</h1>
+        <p>استخدام هذا البوت يعني موافقتك على الشروط التالية: الخدمة مقدمة "كما هي" بدون ضمانات.
+        نحن غير مسؤولين عن أي أضرار ناتجة عن استخدام البوت. نحتفظ بالحق في تعديل الخدمة أو إيقافها في أي وقت.</p>
+        <p>آخر تحديث: 2026</p>
+    </body>
+    </html>
+    """
+
+
+@app.route("/delete-data")
+def delete_data():
+    return """
+    <!DOCTYPE html>
+    <html dir="rtl">
+    <head><meta charset="UTF-8"><title>حذف البيانات</title>
+    <style>body{font-family:sans-serif;padding:40px;max-width:700px;margin:auto;line-height:1.8}
+    h1{color:#333}</style>
+    </head>
+    <body>
+        <h1>حذف البيانات</h1>
+        <p>لحذف جميع بياناتك من البوت، أرسل أمر /delete داخل البوت أو تواصل معنا عبر البوت.</p>
+        <p>سيتم حذف جميع المعلومات المخزنة بما في ذلك حسابك وبيانات تسجيل الدخول.</p>
+        <p>آخر تحديث: 2026</p>
+    </body>
+    </html>
+    """
+
+
 def start_web_server(host: str = "0.0.0.0", port: int = 5000, debug: bool = False):
     init_oauth_tables()
     logger.info(f"Web server starting on {host}:{port}")
